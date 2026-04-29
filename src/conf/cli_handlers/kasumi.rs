@@ -18,13 +18,14 @@ use anyhow::Result;
 use serde::Serialize;
 
 use super::shared::{
-    detect_rule_file_type, load_effective_config, print_json, require_live_kasumi,
+    detect_rule_file_type, load_effective_config, load_runtime_state_or_default, print_json,
+    with_live_kasumi,
 };
 use crate::{
     conf::{cli::Cli, schema::KasumiConfig},
     core::{
         api::{self, LkmPayload},
-        runtime_state::{KasumiRuntimeInfo, RuntimeState},
+        runtime_state::KasumiRuntimeInfo,
     },
     mount::kasumi as kasumi_mount,
     sys::kasumi,
@@ -55,15 +56,7 @@ struct KasumiStatusRuntime {
 
 pub fn handle_kasumi_status(cli: &Cli) -> Result<()> {
     let config = load_effective_config(cli)?;
-    let runtime_state = RuntimeState::load().unwrap_or_else(|err| {
-        crate::scoped_log!(
-            debug,
-            "cli:kasumi:status",
-            "fallback: reason=runtime_state_load_failed, error={:#}",
-            err
-        );
-        RuntimeState::default()
-    });
+    let runtime_state = load_runtime_state_or_default();
     let kasumi_info = kasumi_mount::collect_runtime_info(&config);
 
     let output = KasumiStatusPayload {
@@ -100,15 +93,7 @@ pub fn handle_kasumi_list(cli: &Cli) -> Result<()> {
 
 pub fn handle_kasumi_version(cli: &Cli) -> Result<()> {
     let config = load_effective_config(cli)?;
-    let state = RuntimeState::load().unwrap_or_else(|err| {
-        crate::scoped_log!(
-            debug,
-            "cli:kasumi:version",
-            "fallback: reason=runtime_state_load_failed, error={:#}",
-            err
-        );
-        RuntimeState::default()
-    });
+    let state = load_runtime_state_or_default();
     let payload = api::build_kasumi_version_payload(&config, &state);
     print_json(&payload, "Kasumi version")
 }
@@ -157,60 +142,60 @@ pub fn handle_kasumi_rule_add(
     source: &Path,
     file_type: Option<i32>,
 ) -> Result<()> {
-    let config = load_effective_config(cli)?;
-    require_live_kasumi(&config, "add Kasumi rule")?;
     let file_type = match file_type {
         Some(value) => value,
         None => detect_rule_file_type(source)?,
     };
-    kasumi::add_rule(target, source, file_type)?;
-    println!(
-        "Kasumi ADD rule applied: target={}, source={}, file_type={}",
-        target.display(),
-        source.display(),
-        file_type
-    );
-    Ok(())
+    with_live_kasumi(cli, "add Kasumi rule", || {
+        kasumi::add_rule(target, source, file_type)?;
+        println!(
+            "Kasumi ADD rule applied: target={}, source={}, file_type={}",
+            target.display(),
+            source.display(),
+            file_type
+        );
+        Ok(())
+    })
 }
 
 pub fn handle_kasumi_rule_merge(cli: &Cli, target: &Path, source: &Path) -> Result<()> {
-    let config = load_effective_config(cli)?;
-    require_live_kasumi(&config, "add Kasumi merge rule")?;
-    kasumi::add_merge_rule(target, source)?;
-    println!(
-        "Kasumi MERGE rule applied: target={}, source={}",
-        target.display(),
-        source.display()
-    );
-    Ok(())
+    with_live_kasumi(cli, "add Kasumi merge rule", || {
+        kasumi::add_merge_rule(target, source)?;
+        println!(
+            "Kasumi MERGE rule applied: target={}, source={}",
+            target.display(),
+            source.display()
+        );
+        Ok(())
+    })
 }
 
 pub fn handle_kasumi_rule_hide(cli: &Cli, path: &Path) -> Result<()> {
-    let config = load_effective_config(cli)?;
-    require_live_kasumi(&config, "add Kasumi hide rule")?;
-    kasumi::hide_path(path)?;
-    println!("Kasumi HIDE rule applied: {}", path.display());
-    Ok(())
+    with_live_kasumi(cli, "add Kasumi hide rule", || {
+        kasumi::hide_path(path)?;
+        println!("Kasumi HIDE rule applied: {}", path.display());
+        Ok(())
+    })
 }
 
 pub fn handle_kasumi_rule_delete(cli: &Cli, path: &Path) -> Result<()> {
-    let config = load_effective_config(cli)?;
-    require_live_kasumi(&config, "delete Kasumi rule")?;
-    kasumi::delete_rule(path)?;
-    println!("Kasumi rule deleted: {}", path.display());
-    Ok(())
+    with_live_kasumi(cli, "delete Kasumi rule", || {
+        kasumi::delete_rule(path)?;
+        println!("Kasumi rule deleted: {}", path.display());
+        Ok(())
+    })
 }
 
 pub fn handle_kasumi_rule_add_dir(cli: &Cli, target_base: &Path, source_dir: &Path) -> Result<()> {
-    let config = load_effective_config(cli)?;
-    require_live_kasumi(&config, "add Kasumi rules from directory")?;
-    kasumi::add_rules_from_directory(target_base, source_dir)?;
-    println!(
-        "Kasumi directory rules applied: target_base={}, source_dir={}",
-        target_base.display(),
-        source_dir.display()
-    );
-    Ok(())
+    with_live_kasumi(cli, "add Kasumi rules from directory", || {
+        kasumi::add_rules_from_directory(target_base, source_dir)?;
+        println!(
+            "Kasumi directory rules applied: target_base={}, source_dir={}",
+            target_base.display(),
+            source_dir.display()
+        );
+        Ok(())
+    })
 }
 
 pub fn handle_kasumi_rule_remove_dir(
@@ -218,13 +203,13 @@ pub fn handle_kasumi_rule_remove_dir(
     target_base: &Path,
     source_dir: &Path,
 ) -> Result<()> {
-    let config = load_effective_config(cli)?;
-    require_live_kasumi(&config, "remove Kasumi rules from directory")?;
-    kasumi::remove_rules_from_directory(target_base, source_dir)?;
-    println!(
-        "Kasumi directory rules removed: target_base={}, source_dir={}",
-        target_base.display(),
-        source_dir.display()
-    );
-    Ok(())
+    with_live_kasumi(cli, "remove Kasumi rules from directory", || {
+        kasumi::remove_rules_from_directory(target_base, source_dir)?;
+        println!(
+            "Kasumi directory rules removed: target_base={}, source_dir={}",
+            target_base.display(),
+            source_dir.display()
+        );
+        Ok(())
+    })
 }

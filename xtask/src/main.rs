@@ -25,10 +25,10 @@ use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand, ValueEnum};
 use fs_extra::{dir, file};
 use hybrid_mount_notify::{NotifyRequest, maybe_send_output_dir_notification};
-use semver::Version;
-use serde::Deserialize;
 use zip::{CompressionMethod, write::FileOptions};
 
+#[path = "build_meta_shared.rs"]
+mod build_meta_shared;
 mod zip_ext;
 use crate::zip_ext::zip_create_from_directory_with_options;
 
@@ -37,29 +37,6 @@ const KPM_PROJECT_DIR_CANDIDATES: [&str; 2] = ["nuke-kpm", "kpm"];
 const KPM_MODULE_NAME: &str = "nuke_ext4_sysfs";
 const KPM_STAGE_NAME: &str = "nuke_ext4_sysfs.kpm";
 const KASUMI_LKM_STAGE_DIR: &str = "kasumi_lkm";
-
-#[derive(Deserialize)]
-struct HybridMountMetadata {
-    name: String,
-    update: String,
-}
-
-#[derive(Deserialize)]
-struct PackageMetadata {
-    hybrid_mount: HybridMountMetadata,
-}
-
-#[derive(Deserialize)]
-struct Package {
-    version: String,
-    description: String,
-    metadata: PackageMetadata,
-}
-
-#[derive(Deserialize)]
-struct CargoConfig {
-    package: Package,
-}
 
 #[derive(Debug, Clone, Copy, ValueEnum, PartialEq)]
 enum Arch {
@@ -114,6 +91,11 @@ struct VersionInfo {
 struct NotifyPlan {
     topic_id: Option<i64>,
     event_label: String,
+}
+
+fn load_cargo_config() -> Result<build_meta_shared::CargoConfig> {
+    let toml = fs::read_to_string("Cargo.toml")?;
+    Ok(toml::from_str(&toml)?)
 }
 
 fn main() -> Result<()> {
@@ -515,24 +497,18 @@ fn find_kpm_artifact(project_dir: &Path) -> Result<Option<PathBuf>> {
 }
 
 fn generate_module_prop(stage_dir: &Path, info: &VersionInfo) -> Result<()> {
-    let toml_content = fs::read_to_string("Cargo.toml")?;
-    let config: CargoConfig = toml::from_str(&toml_content)?;
+    let config = load_cargo_config()?;
 
     let meta = config.package.metadata.hybrid_mount;
-
-    let prop_content = format!(
-        r#"id=hybrid_mount
-name={}
-version={}
-versionCode={}
-author=Hybrid Mount Developers
-description={}
-updateJson={}
-metamodule=1
-webuiIcon=launcher.png
-"#,
-        meta.name, info.full_version, info.version_code, config.package.description, meta.update
-    );
+    let prop_content = build_meta_shared::render_module_prop(&build_meta_shared::ModulePropData {
+        id: "hybrid_mount",
+        name: &meta.name,
+        version: &info.full_version,
+        version_code: &info.version_code,
+        author: "Hybrid Mount Developers",
+        description: &config.package.description,
+        update_json: &meta.update,
+    });
 
     let prop_path = stage_dir.join("module.prop");
     let mut file = fs::File::create(prop_path)?;
@@ -564,16 +540,12 @@ fn build_webui(version: &str, is_release: bool) -> Result<()> {
 
 fn generate_webui_constants(version: &str, is_release: bool) -> Result<()> {
     let path = Path::new("webui/src/lib/constants_gen.ts");
-    let content = format!(
-        r#"
-export const APP_VERSION = "{version}";
-export const IS_RELEASE = {is_release};
-export const RUST_PATHS = {{
-  CONFIG: "/data/adb/hybrid-mount/config.toml",
-  DAEMON_STATE: "/data/adb/hybrid-mount/run/daemon_state.json",
-  BINARY: "/data/adb/modules/hybrid_mount/hybrid-mount",
-}} as const;
-"#
+    let content = build_meta_shared::render_webui_constants(
+        version,
+        is_release,
+        build_meta_shared::defs::CONFIG_FILE,
+        build_meta_shared::defs::STATE_FILE,
+        &format!("{}/hybrid-mount", build_meta_shared::defs::HYBRID_MOUNT_MODULE_DIR),
     );
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
@@ -611,18 +583,13 @@ fn compile_core(release: bool, arch: Arch) -> Result<()> {
     Ok(())
 }
 
-fn calculate_version_code(version_str: &str) -> Result<String> {
-    let version = Version::parse(version_str)?;
-    Ok((version.major * 100000 + version.minor * 1000 + version.patch).to_string())
-}
-
 fn resolve_release_version(tag: &str) -> Result<VersionInfo> {
     let clean_version = tag.trim_start_matches('v');
     update_cargo_toml_version(clean_version)?;
 
-    let commit_count = cal_git_code()?;
+    let commit_count = build_meta_shared::git_commit_count()?;
     let full_version = format!("{}-{}", clean_version, commit_count);
-    let version_code = calculate_version_code(clean_version)?;
+    let version_code = build_meta_shared::calculate_version_code(clean_version)?;
 
     Ok(VersionInfo {
         clean_version: clean_version.to_string(),
@@ -632,13 +599,12 @@ fn resolve_release_version(tag: &str) -> Result<VersionInfo> {
 }
 
 fn resolve_local_or_ci_version() -> Result<VersionInfo> {
-    let toml = fs::read_to_string("Cargo.toml")?;
-    let data: CargoConfig = toml::from_str(&toml)?;
+    let data = load_cargo_config()?;
     let clean_version = data.package.version;
-    let commit_count = cal_git_code()?;
+    let commit_count = build_meta_shared::git_commit_count()?;
 
     let full_version = format!("{}-{}", clean_version, commit_count);
-    let version_code = calculate_version_code(&clean_version)?;
+    let version_code = build_meta_shared::calculate_version_code(&clean_version)?;
 
     Ok(VersionInfo {
         clean_version,
@@ -666,16 +632,4 @@ fn update_cargo_toml_version(version: &str) -> Result<()> {
         writeln!(file, "{}", line)?;
     }
     Ok(())
-}
-
-// NOTE: keep in sync with build.rs cal_git_code()
-fn cal_git_code() -> Result<i32> {
-    Ok(String::from_utf8(
-        Command::new("git")
-            .args(["rev-list", "--count", "HEAD"])
-            .output()?
-            .stdout,
-    )?
-    .trim()
-    .parse::<i32>()?)
 }

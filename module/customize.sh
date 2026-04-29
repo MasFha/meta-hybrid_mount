@@ -53,6 +53,26 @@ elif [ -z "$APATCH" ] && [ -d "$MODPATH/kpm" ] && ls "$MODPATH"/kpm/*.kpm >/dev/
   ui_print "- APatch not detected, skipping KPM asset extraction"
 fi
 
+wait_volume_key_or_timeout() {
+  local timeout_seconds=$1
+  local start_time=$(date +%s)
+  while true; do
+    local current_time=$(date +%s)
+    if [ $((current_time - start_time)) -ge "$timeout_seconds" ]; then
+      printf 'timeout\n'
+      return 0
+    fi
+    local key_event=$(timeout 0.5 getevent -l 2>/dev/null)
+    if echo "$key_event" | grep -q "KEY_VOLUMEUP"; then
+      printf 'up\n'
+      return 0
+    elif echo "$key_event" | grep -q "KEY_VOLUMEDOWN"; then
+      printf 'down\n'
+      return 0
+    fi
+  done
+}
+
 show_usage_notice_and_confirm() {
   local github_url="https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/master/USAGE_NOTICE.md"
   local confirm_timeout=15
@@ -69,22 +89,17 @@ show_usage_notice_and_confirm() {
   fi
   ui_print "- Press any volume key (Vol+ / Vol-) to confirm."
   ui_print "- Auto-confirming in ${confirm_timeout}s if no key is detected."
-  local start_time=$(date +%s)
-  while true; do
-    local current_time=$(date +%s)
-    if [ $((current_time - start_time)) -ge $confirm_timeout ]; then
-      ui_print "- No key detected, auto-confirmed after ${confirm_timeout}s."
-      break
-    fi
-    local key_event=$(timeout 0.5 getevent -l 2>/dev/null)
-    if echo "$key_event" | grep -q "KEY_VOLUMEUP"; then
-      ui_print "- Confirmed (Vol+)"
-      break
-    elif echo "$key_event" | grep -q "KEY_VOLUMEDOWN"; then
-      ui_print "- Confirmed (Vol-)"
-      break
-    fi
-  done
+  case "$(wait_volume_key_or_timeout "$confirm_timeout")" in
+  up)
+    ui_print "- Confirmed (Vol+)"
+    ;;
+  down)
+    ui_print "- Confirmed (Vol-)"
+    ;;
+  timeout)
+    ui_print "- No key detected, auto-confirmed after ${confirm_timeout}s."
+    ;;
+  esac
 }
 
 KEY_volume_detect() {
@@ -98,25 +113,20 @@ KEY_volume_detect() {
   ui_print "  Defaulting to OverlayFS in 10 seconds"
   ui_print "========================================"
   local timeout=10
-  local start_time=$(date +%s)
   local chosen_mode="overlay"
-  while true; do
-    local current_time=$(date +%s)
-    if [ $((current_time - start_time)) -ge $timeout ]; then
-      ui_print "- Timeout: Selected OverlayFS"
-      break
-    fi
-    local key_event=$(timeout 0.5 getevent -l 2>/dev/null)
-    if echo "$key_event" | grep -q "KEY_VOLUMEUP"; then
-      chosen_mode="overlay"
-      ui_print "- Key Detected: Selected OverlayFS"
-      break
-    elif echo "$key_event" | grep -q "KEY_VOLUMEDOWN"; then
-      chosen_mode="magic"
-      ui_print "- Key Detected: Selected Magic Mount"
-      break
-    fi
-  done
+  case "$(wait_volume_key_or_timeout "$timeout")" in
+  up)
+    chosen_mode="overlay"
+    ui_print "- Key Detected: Selected OverlayFS"
+    ;;
+  down)
+    chosen_mode="magic"
+    ui_print "- Key Detected: Selected Magic Mount"
+    ;;
+  timeout)
+    ui_print "- Timeout: Selected OverlayFS"
+    ;;
+  esac
   ui_print "- Configured mode: $chosen_mode"
   sed -i "s/^default_mode = .*/default_mode = \"$chosen_mode\"/" "$BASE_DIR/config.toml"
 }

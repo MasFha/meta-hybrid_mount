@@ -14,60 +14,38 @@
 
 use anyhow::Result;
 
-use super::shared::{print_json, require_live_kasumi};
+use super::shared::{
+    load_effective_config, load_runtime_state_or_default, print_json, require_live_kasumi,
+};
 use crate::{conf::cli::Cli, core::api, mount::kasumi as kasumi_mount};
 
 pub fn handle_api_storage() -> Result<()> {
-    let state = crate::core::runtime_state::RuntimeState::load().unwrap_or_else(|err| {
-        crate::scoped_log!(
-            debug,
-            "cli:api:storage",
-            "fallback: reason=runtime_state_load_failed, error={:#}",
-            err
-        );
-        crate::core::runtime_state::RuntimeState::default()
-    });
+    let state = load_runtime_state_or_default();
     let payload = api::build_storage_payload(&state);
     print_json(&payload, "storage payload")
 }
 
 pub fn handle_api_mount_stats() -> Result<()> {
-    let state = crate::core::runtime_state::RuntimeState::load().unwrap_or_else(|err| {
-        crate::scoped_log!(
-            debug,
-            "cli:api:mount_stats",
-            "fallback: reason=runtime_state_load_failed, error={:#}",
-            err
-        );
-        crate::core::runtime_state::RuntimeState::default()
-    });
+    let state = load_runtime_state_or_default();
     let payload = api::build_mount_stats_payload(&state);
     print_json(&payload, "mount stats payload")
 }
 
 pub fn handle_api_mount_topology(cli: &Cli) -> Result<()> {
-    let config = crate::conf::loader::load_config(cli)?;
-    let state = crate::core::runtime_state::RuntimeState::load().unwrap_or_else(|err| {
-        crate::scoped_log!(
-            debug,
-            "cli:api:mount_topology",
-            "fallback: reason=runtime_state_load_failed, error={:#}",
-            err
-        );
-        crate::core::runtime_state::RuntimeState::default()
-    });
+    let config = load_effective_config(cli)?;
+    let state = load_runtime_state_or_default();
     let payload = api::build_mount_topology_payload(&config, &state);
     print_json(&payload, "mount topology payload")
 }
 
 pub fn handle_api_partitions(cli: &Cli) -> Result<()> {
-    let config = crate::conf::loader::load_config(cli)?;
+    let config = load_effective_config(cli)?;
     let payload = api::build_partitions_payload(&config);
     print_json(&payload, "partitions payload")
 }
 
 pub fn handle_api_lkm(cli: &Cli) -> Result<()> {
-    let config = crate::conf::loader::load_config(cli)?;
+    let config = load_effective_config(cli)?;
     let payload = api::build_lkm_payload(&config);
     print_json(&payload, "LKM payload")
 }
@@ -78,7 +56,7 @@ pub fn handle_api_features() -> Result<()> {
 }
 
 pub fn handle_api_hooks(cli: &Cli) -> Result<()> {
-    let config = crate::conf::loader::load_config(cli)?;
+    let config = load_effective_config(cli)?;
     require_live_kasumi(&config, "read Kasumi hooks")?;
     println!("{}", kasumi_mount::hook_lines()?.join("\n"));
     Ok(())

@@ -29,6 +29,14 @@ use crate::{
     sys::fs::{ensure_dir_exists, lsetfilecon},
 };
 
+const EXT4_MIN_IMAGE_SIZE_BYTES: u64 = 64 * 1024 * 1024;
+const EXT4_GROWTH_FACTOR: f64 = 1.2;
+const STAT_BLOCK_SIZE_BYTES: u64 = 512;
+const MODULES_IMG_SELINUX_CONTEXT: &str = "u:object_r:ksu_file:s0";
+const MKFS_EXT4_BLOCK_SIZE: &str = "1024";
+const MKFS_EXT4_BYTES_PER_INODE: &str = "4096";
+const E2FSCK_SUCCESS_MAX_EXIT_CODE: i32 = 3;
+
 pub(super) fn setup_ext4_image(
     target: &Path,
     img_path: &Path,
@@ -36,13 +44,13 @@ pub(super) fn setup_ext4_image(
 ) -> Result<Ext4Backend> {
     crate::scoped_log!(trace, "storage:ext4", "backend select: mode=ext4");
     let total_size = calculate_total_size(source_paths)?;
-    let min_size = 64 * 1024 * 1024;
-    let grow_size = std::cmp::max((total_size as f64 * 1.2) as u64, min_size);
+    let min_size = EXT4_MIN_IMAGE_SIZE_BYTES;
+    let grow_size = std::cmp::max((total_size as f64 * EXT4_GROWTH_FACTOR) as u64, min_size);
 
     fs::File::create(img_path)?.set_len(grow_size)?;
     format_ext4_image(img_path)?;
     check_image(img_path)?;
-    if let Err(e) = lsetfilecon(img_path, "u:object_r:ksu_file:s0") {
+    if let Err(e) = lsetfilecon(img_path, MODULES_IMG_SELINUX_CONTEXT) {
         crate::scoped_log!(
             warn,
             "storage",
@@ -97,7 +105,7 @@ fn calculate_total_size(paths: &[PathBuf]) -> Result<u64> {
                 continue;
             }
 
-            total_size += metadata.blocks() * 512;
+            total_size += metadata.blocks() * STAT_BLOCK_SIZE_BYTES;
         } else if file_type.is_dir() {
             match current.read_dir() {
                 Ok(entries) => {
@@ -129,9 +137,9 @@ fn calculate_total_size(paths: &[PathBuf]) -> Result<u64> {
 fn format_ext4_image(img_path: &Path) -> Result<()> {
     let result = Command::new("mkfs.ext4")
         .arg("-b")
-        .arg("1024")
+        .arg(MKFS_EXT4_BLOCK_SIZE)
         .arg("-i")
-        .arg("4096")
+        .arg(MKFS_EXT4_BYTES_PER_INODE)
         .arg(img_path)
         .stdout(std::process::Stdio::piped())
         .output()?;
@@ -152,7 +160,7 @@ fn check_image(img_path: &Path) -> Result<()> {
         .context("e2fsck exited without an exit code (terminated by signal)")?;
 
     ensure!(
-        (0..=3).contains(&code),
+        (0..=E2FSCK_SUCCESS_MAX_EXIT_CODE).contains(&code),
         "e2fsck failed for {} with exit code {}",
         img_path.display(),
         code

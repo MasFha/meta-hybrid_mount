@@ -23,6 +23,7 @@ use serde::Serialize;
 
 use crate::{
     conf::{cli::Cli, config::Config, store::ConfigSession},
+    core::runtime_state::RuntimeState,
     mount::kasumi as kasumi_mount,
 };
 
@@ -32,6 +33,20 @@ pub(super) fn load_effective_config(cli: &Cli) -> Result<Config> {
 
 pub(super) fn require_live_kasumi(config: &Config, description: &str) -> Result<()> {
     kasumi_mount::require_live(config, description)
+}
+
+pub(super) fn with_live_kasumi<T>(
+    cli: &Cli,
+    description: &str,
+    op: impl FnOnce() -> Result<T>,
+) -> Result<T> {
+    let config = load_effective_config(cli)?;
+    require_live_kasumi(&config, description)?;
+    op()
+}
+
+pub(super) fn load_runtime_state_or_default() -> RuntimeState {
+    RuntimeState::load().unwrap_or_default()
 }
 
 pub(super) fn print_json<T: Serialize>(payload: &T, description: &str) -> Result<()> {
