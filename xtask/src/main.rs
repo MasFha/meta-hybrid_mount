@@ -545,7 +545,10 @@ fn generate_webui_constants(version: &str, is_release: bool) -> Result<()> {
         is_release,
         build_meta_shared::defs::CONFIG_FILE,
         build_meta_shared::defs::STATE_FILE,
-        &format!("{}/hybrid-mount", build_meta_shared::defs::HYBRID_MOUNT_MODULE_DIR),
+        &format!(
+            "{}/hybrid-mount",
+            build_meta_shared::defs::HYBRID_MOUNT_MODULE_DIR
+        ),
     );
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;

@@ -29,7 +29,11 @@ fn gen_module_prop(data: &build_meta_shared::CargoConfig) -> Result<()> {
     let id = package.name.replace('-', "_");
     let version_code = build_meta_shared::calculate_version_code(&package.version)?;
     let author = package.authors.join(" & ");
-    let version = format!("{}-{}", package.version, build_meta_shared::git_commit_count()?);
+    let version = format!(
+        "{}-{}",
+        package.version,
+        build_meta_shared::git_commit_count()?
+    );
     let rendered_version = format!("v{}", version.trim());
     let content = build_meta_shared::render_module_prop(&build_meta_shared::ModulePropData {
         id: &id,
