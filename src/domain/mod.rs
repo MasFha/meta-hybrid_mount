@@ -22,7 +22,6 @@ pub enum DefaultMode {
     #[default]
     Overlay,
     Magic,
-    #[serde(alias = "hymofs")]
     Kasumi,
 }
 
@@ -42,7 +41,6 @@ pub enum MountMode {
     #[default]
     Overlay,
     Magic,
-    #[serde(alias = "hymofs")]
     Kasumi,
     Ignore,
 }

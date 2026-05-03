@@ -71,6 +71,8 @@ pub enum KasumiCommands {
     InvalidateCache,
     #[command(name = "fix-mounts")]
     FixMounts,
+    #[command(name = "restore-uname-global")]
+    RestoreUnameGlobal,
     Rule {
         #[command(subcommand)]
         command: KasumiRuleCommands,

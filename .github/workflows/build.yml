@@ -81,6 +81,19 @@ jobs:
           pattern: "*-kasumi-lkm"
           merge-multiple: true
 
+      - name: Download Kasumi UAPI
+        uses: actions/download-artifact@v8
+        with:
+          name: kasumi-uapi
+          path: kasumi_uapi_artifact
+
+      - name: Sync Kasumi UAPI
+        run: |
+          set -euo pipefail
+          test -s kasumi_uapi_artifact/kasumi_uapi.h
+          cp kasumi_uapi_artifact/kasumi_uapi.h src/sys/kasumi_uapi.h
+          sha256sum src/sys/kasumi_uapi.h
+
       - name: Setup Android NDK
         uses: nttld/setup-ndk@v1
         with:

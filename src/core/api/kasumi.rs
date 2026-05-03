@@ -98,8 +98,6 @@ pub fn parse_kasumi_rule_listing(listing: &str) -> Vec<KasumiRuleEntry> {
         if line.is_empty()
             || line.starts_with("Kasumi Protocol:")
             || line.starts_with("Kasumi Enabled:")
-            || line.starts_with("HymoFS Protocol:")
-            || line.starts_with("HymoFS Enabled:")
         {
             continue;
         }
@@ -179,7 +177,7 @@ pub fn build_lkm_payload(config: &Config) -> LkmPayload {
 pub fn build_kasumi_version_payload(config: &Config, state: &RuntimeState) -> KasumiVersionPayload {
     if !config.kasumi.enabled {
         return KasumiVersionPayload {
-            protocol_version: kasumi::HYMO_PROTOCOL_VERSION,
+            protocol_version: kasumi::KSM_PROTOCOL_VERSION,
             kernel_version: 0,
             kasumi_available: false,
             protocol_mismatch: false,
@@ -203,10 +201,10 @@ pub fn build_kasumi_version_payload(config: &Config, state: &RuntimeState) -> Ka
         extract_active_module_ids(&parsed_rules, &config.kasumi.mirror_path)
     };
 
-    let mismatch = kernel_version.is_some_and(|version| version != kasumi::HYMO_PROTOCOL_VERSION);
+    let mismatch = kernel_version.is_some_and(|version| version != kasumi::KSM_PROTOCOL_VERSION);
 
     KasumiVersionPayload {
-        protocol_version: kasumi::HYMO_PROTOCOL_VERSION,
+        protocol_version: kasumi::KSM_PROTOCOL_VERSION,
         kernel_version: kernel_version.unwrap_or_default(),
         kasumi_available: status == KasumiStatus::Available,
         protocol_mismatch: mismatch,
@@ -222,19 +220,19 @@ fn mismatch_message(status: KasumiStatus, kernel_version: Option<i32>) -> Option
         KasumiStatus::KernelTooOld => Some(format!(
             "kernel protocol {} is older than userspace api{}",
             kernel_version.unwrap_or_default(),
-            kasumi::HYMO_PROTOCOL_VERSION
+            kasumi::KSM_PROTOCOL_VERSION
         )),
         KasumiStatus::ModuleTooOld => Some(format!(
             "kernel protocol {} is newer than userspace api{}",
             kernel_version.unwrap_or_default(),
-            kasumi::HYMO_PROTOCOL_VERSION
+            kasumi::KSM_PROTOCOL_VERSION
         )),
         KasumiStatus::Available => kernel_version
-            .filter(|version| *version != kasumi::HYMO_PROTOCOL_VERSION)
+            .filter(|version| *version != kasumi::KSM_PROTOCOL_VERSION)
             .map(|version| {
                 format!(
                     "protocol mismatch: userspace api{}, kernel api{}",
-                    kasumi::HYMO_PROTOCOL_VERSION,
+                    kasumi::KSM_PROTOCOL_VERSION,
                     version
                 )
             }),

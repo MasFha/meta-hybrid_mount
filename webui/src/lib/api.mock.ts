@@ -33,6 +33,7 @@ function createMockState() {
       kernelDebug: false,
       mapsSpoof: true,
       cmdline: "androidboot.verifiedbootstate=green",
+      unameMode: "scoped" as "scoped" | "global",
       uname: {
         sysname: "",
         nodename: "",
@@ -109,6 +110,7 @@ function buildMockKasumiConfig(enabled: boolean): KasumiStatus["config"] {
       spoof_f_type: kasumi.statfsSpoof.fType,
     },
     hide_uids: [...kasumi.hideUids],
+    uname_mode: kasumi.unameMode,
     uname: { ...kasumi.uname },
     uname_release: kasumi.uname.release,
     uname_version: kasumi.uname.version,
@@ -148,7 +150,7 @@ function buildMockKasumiStatus(): KasumiStatus {
   return {
     status: available ? "available" : "unavailable",
     available,
-    protocol_version: available ? 14 : null,
+    protocol_version: available ? 15 : null,
     feature_bits: available ? 487 : null,
     feature_names: available
       ? [
@@ -303,6 +305,10 @@ export const MockAPI: AppAPI = {
   async getOriginalKernelUname(): Promise<KernelUnameValues> {
     await delay(120);
     return { ...mockState.kasumi.originalKernel };
+  },
+  async setKasumiUnameMode(mode: "scoped" | "global"): Promise<void> {
+    await delay(120);
+    mockState.kasumi.unameMode = mode;
   },
   async setKasumiUname(uname: Partial<KasumiUnameConfig>): Promise<void> {
     await delay(220);

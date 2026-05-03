@@ -74,6 +74,9 @@ pub fn run(cli: &Cli, command: &Commands) -> Result<()> {
             KasumiCommands::ReleaseConnection => cli_handlers::handle_kasumi_release_connection(),
             KasumiCommands::InvalidateCache => cli_handlers::handle_kasumi_invalidate_cache(),
             KasumiCommands::FixMounts => cli_handlers::handle_kasumi_fix_mounts(),
+            KasumiCommands::RestoreUnameGlobal => {
+                cli_handlers::handle_kasumi_restore_uname_global()
+            }
             KasumiCommands::Rule { command } => match command {
                 KasumiRuleCommands::Add {
                     target,

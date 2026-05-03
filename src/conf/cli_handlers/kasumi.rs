@@ -136,6 +136,14 @@ pub fn handle_kasumi_fix_mounts() -> Result<()> {
     Ok(())
 }
 
+pub fn handle_kasumi_restore_uname_global() -> Result<()> {
+    crate::scoped_log!(info, "cli:kasumi:restore_uname_global", "start");
+    kasumi::restore_uname_global()?;
+    crate::scoped_log!(info, "cli:kasumi:restore_uname_global", "complete");
+    println!("Kasumi global uname restored.");
+    Ok(())
+}
+
 pub fn handle_kasumi_rule_add(
     cli: &Cli,
     target: &Path,

@@ -202,13 +202,9 @@ fn candidate_file_names(kmi: &str) -> Vec<String> {
     if !kmi.is_empty() {
         candidates.push(format!("{kmi}{suffix}_kasumi_lkm.ko"));
         candidates.push(format!("{kmi}_kasumi_lkm.ko"));
-        candidates.push(format!("{kmi}{suffix}_hymofs_lkm.ko"));
-        candidates.push(format!("{kmi}_hymofs_lkm.ko"));
     }
     candidates.push(format!("{suffix}_kasumi_lkm.ko"));
     candidates.push("kasumi_lkm.ko".to_string());
-    candidates.push(format!("{suffix}_hymofs_lkm.ko"));
-    candidates.push("hymofs_lkm.ko".to_string());
 
     let mut seen = HashSet::new();
     candidates.retain(|value| seen.insert(value.clone()));
@@ -258,11 +254,7 @@ fn loaded_module_name() -> Option<String> {
     let content = fs::read_to_string("/proc/modules").ok()?;
     content.lines().find_map(|line| {
         let name = line.split_whitespace().next()?;
-        matches!(
-            name,
-            defs::KASUMI_LKM_MODULE_NAME | "kasumi" | "hymofs_lkm" | "hymofs"
-        )
-        .then(|| name.to_string())
+        matches!(name, defs::KASUMI_LKM_MODULE_NAME | "kasumi").then(|| name.to_string())
     })
 }
 
@@ -451,7 +443,7 @@ pub fn load(config: &KasumiConfig) -> Result<()> {
         )
     })?;
 
-    let params = format!("hymo_syscall_nr={}", kasumi::HYMO_SYSCALL_NR);
+    let params = String::new();
     if let Err(primary_err) = load_module_via_finit(&ko_path, &params) {
         if KSU.load(Ordering::Relaxed) {
             crate::scoped_log!(

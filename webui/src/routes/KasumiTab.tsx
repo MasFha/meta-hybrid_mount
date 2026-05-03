@@ -57,11 +57,13 @@ export default function KasumiTab() {
   const [loading, setLoading] = createSignal(true);
   const [pending, setPending] = createSignal(false);
   const [showKmiDialog, setShowKmiDialog] = createSignal(false);
+  const [showUnloadLkmWarning, setShowUnloadLkmWarning] = createSignal(false);
   const [expandedSection, setExpandedSection] = createSignal<string | null>(
     null,
   );
   const [forms, setForms] = createStore({
     kmi: "",
+    unameMode: "scoped" as "scoped" | "global",
     release: "",
     version: "",
     cmdline: "",
@@ -96,6 +98,7 @@ export default function KasumiTab() {
 
     setForms({
       kmi: nextStatus.lkm?.kmi_override || config.lkm_kmi_override || "",
+      unameMode: config.uname_mode === "global" ? "global" : "scoped",
       release: uname.release || config.uname_release || "",
       version: uname.version || config.uname_version || "",
       cmdline: config.cmdline_value || "",
@@ -330,6 +333,38 @@ export default function KasumiTab() {
         </md-dialog>
       </div>
 
+      <div class="dialog-container">
+        <md-dialog
+          open={showUnloadLkmWarning()}
+          onclose={() => setShowUnloadLkmWarning(false)}
+          class="transparent-scrim"
+        >
+          <div slot="headline">
+            {uiStore.L.kasumi?.unloadLkmWarningTitle ?? "注意！"}
+          </div>
+          <div slot="content">
+            {uiStore.L.kasumi?.unloadLkmWarningBody ??
+              "Kasumi 使用 TSR 模式时可能无法卸载，如 5 秒内未成功卸载，Kasumi 将会在 3 秒后自动安全重启，你确定要卸载吗？"}
+          </div>
+          <div slot="actions">
+            <md-text-button onClick={() => setShowUnloadLkmWarning(false)}>
+              {uiStore.L.kasumi?.unloadLkmWarningCancel ?? "取消"}
+            </md-text-button>
+            <md-text-button
+              onClick={() => {
+                setShowUnloadLkmWarning(false);
+                void runAction(
+                  () => API.unloadKasumiLkm(),
+                  uiStore.L.kasumi?.unloadLkm ?? "LKM unloaded",
+                );
+              }}
+            >
+              {uiStore.L.kasumi?.unloadLkmWarningConfirm ?? "确定"}
+            </md-text-button>
+          </div>
+        </md-dialog>
+      </div>
+
       <div class="kasumi-page">
         <div class="dashboard-grid kasumi-dashboard-grid">
           <section class="hero-card kasumi-status-card">
@@ -453,15 +488,12 @@ export default function KasumiTab() {
                     <md-filled-button
                       disabled={pending()}
                       onClick={() =>
-                        runAction(
-                          () =>
-                            lkm()?.loaded
-                              ? API.unloadKasumiLkm()
-                              : API.loadKasumiLkm(),
-                          lkm()?.loaded
-                            ? (uiStore.L.kasumi?.unloadLkm ?? "LKM unloaded")
-                            : (uiStore.L.kasumi?.loadLkm ?? "LKM loaded"),
-                        )
+                        lkm()?.loaded
+                          ? setShowUnloadLkmWarning(true)
+                          : runAction(
+                              () => API.loadKasumiLkm(),
+                              uiStore.L.kasumi?.loadLkm ?? "LKM loaded",
+                            )
                       }
                     >
                       {lkm()?.loaded
@@ -631,6 +663,29 @@ export default function KasumiTab() {
             >
               <div class="kasumi-section-body-inner">
                 <div class="kasumi-section-body field-stack">
+                  <label class="kasumi-select-label">
+                    {uiStore.L.kasumi?.unameMode ?? "Uname Mode"}
+                  </label>
+                  <select
+                    class="kasumi-select"
+                    value={forms.unameMode}
+                    disabled={pending()}
+                    onInput={(e: Event) =>
+                      setForms(
+                        "unameMode",
+                        (e.currentTarget as HTMLSelectElement).value === "global"
+                          ? "global"
+                          : "scoped",
+                      )
+                    }
+                  >
+                    <option value="scoped">
+                      {uiStore.L.kasumi?.unameModeScoped ?? "Scoped"}
+                    </option>
+                    <option value="global">
+                      {uiStore.L.kasumi?.unameModeGlobal ?? "Global"}
+                    </option>
+                  </select>
                   <md-outlined-text-field
                     class="full-field kasumi-input-field"
                     label={uiStore.L.kasumi?.unameRelease ?? "Uname Release"}
@@ -667,11 +722,13 @@ export default function KasumiTab() {
                       disabled={pending()}
                       onClick={() =>
                         runAction(
-                          () =>
-                            API.setKasumiUname({
+                          async () => {
+                            await API.setKasumiUnameMode(forms.unameMode);
+                            await API.setKasumiUname({
                               release: forms.release,
                               version: forms.version,
-                            }),
+                            });
+                          },
                           uiStore.L.common?.saved ?? "Saved",
                         )
                       }

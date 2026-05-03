@@ -13,7 +13,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   kasumi: {
     enabled: false,
     lkm_autoload: true,
-    lkm_dir: "/data/adb/kasumi/lkm",
+    lkm_dir: "/data/adb/modules/hybrid_mount/kasumi_lkm",
     lkm_kmi_override: "",
     mirror_path: "/dev/kasumi_mirror",
     enable_kernel_debug: false,
@@ -25,6 +25,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     mount_hide: { enabled: false, path_pattern: "" },
     statfs_spoof: { enabled: false, path: "", spoof_f_type: 0 },
     hide_uids: [],
+    uname_mode: "scoped",
     uname: {
       sysname: "",
       nodename: "",

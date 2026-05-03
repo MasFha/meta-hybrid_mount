@@ -15,7 +15,7 @@
 #![allow(dead_code)]
 
 use std::{
-    ffi::{CString, c_char, c_int, c_long, c_uint, c_ulong, c_void},
+    ffi::{CString, c_char, c_int, c_ulong, c_void},
     fs,
     mem::size_of,
     os::{
@@ -38,40 +38,41 @@ use rustix::{
 };
 use walkdir::WalkDir;
 
-pub const HYMO_MAGIC1: c_int = 0x4859_4D4F;
-pub const HYMO_MAGIC2: c_int = 0x524F_4F54;
-pub const HYMO_PROTOCOL_VERSION: c_int = 14;
-
-pub const HYMO_MAX_LEN_PATHNAME: usize = 256;
-pub const HYMO_FAKE_CMDLINE_SIZE: usize = 4096;
-pub const HYMO_UNAME_LEN: usize = 65;
-
-pub const HYMO_SYSCALL_NR: libc::c_long = 142;
-pub const HYMO_CMD_GET_FD: c_int = 0x48021;
-pub const HYMO_PRCTL_GET_FD: c_int = 0x48021;
-
-pub const HYMO_FEATURE_KSTAT_SPOOF: c_int = 1 << 0;
-pub const HYMO_FEATURE_UNAME_SPOOF: c_int = 1 << 1;
-pub const HYMO_FEATURE_CMDLINE_SPOOF: c_int = 1 << 2;
-pub const HYMO_FEATURE_SELINUX_BYPASS: c_int = 1 << 4;
-pub const HYMO_FEATURE_MERGE_DIR: c_int = 1 << 5;
-pub const HYMO_FEATURE_MOUNT_HIDE: c_int = 1 << 6;
-pub const HYMO_FEATURE_MAPS_SPOOF: c_int = 1 << 7;
-pub const HYMO_FEATURE_STATFS_SPOOF: c_int = 1 << 8;
-
-const HYMO_IOC_MAGIC: u8 = b'H';
-
-type HymoIoctlRequest = Opcode;
-
-#[repr(C)]
-#[derive(Clone, Copy, Debug)]
-pub struct HymoSyscallArg {
-    pub src: *const c_char,
-    pub target: *const c_char,
-    pub type_: c_int,
+#[allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
+mod uapi {
+    include!(concat!(env!("OUT_DIR"), "/kasumi_uapi.rs"));
 }
 
-impl HymoSyscallArg {
+pub const KSM_MAGIC1: c_int = uapi::KSM_MAGIC1 as c_int;
+pub const KSM_MAGIC2: c_int = uapi::KSM_MAGIC2 as c_int;
+pub const KSM_PROTOCOL_VERSION: c_int = uapi::KSM_PROTOCOL_VERSION as c_int;
+
+pub const KSM_MAX_LEN_PATHNAME: usize = uapi::KSM_MAX_LEN_PATHNAME as usize;
+pub const KSM_FAKE_CMDLINE_SIZE: usize = uapi::KSM_FAKE_CMDLINE_SIZE as usize;
+pub const KSM_UNAME_LEN: usize = uapi::KSM_UNAME_LEN as usize;
+
+pub const KSM_SYSCALL_NR: libc::c_long = uapi::KSM_SYSCALL_NR as libc::c_long;
+pub const KSM_CMD_GET_FD: c_int = uapi::KSM_CMD_GET_FD as c_int;
+pub const KSM_PRCTL_GET_FD: c_int = uapi::KSM_PRCTL_GET_FD as c_int;
+
+pub const KSM_FEATURE_KSTAT_SPOOF: c_int = uapi::KSM_FEATURE_KSTAT_SPOOF as c_int;
+pub const KSM_FEATURE_UNAME_SPOOF: c_int = uapi::KSM_FEATURE_UNAME_SPOOF as c_int;
+pub const KSM_FEATURE_CMDLINE_SPOOF: c_int = uapi::KSM_FEATURE_CMDLINE_SPOOF as c_int;
+pub const KSM_FEATURE_SELINUX_BYPASS: c_int = uapi::KSM_FEATURE_SELINUX_BYPASS as c_int;
+pub const KSM_FEATURE_MERGE_DIR: c_int = uapi::KSM_FEATURE_MERGE_DIR as c_int;
+pub const KSM_FEATURE_MOUNT_HIDE: c_int = uapi::KSM_FEATURE_MOUNT_HIDE as c_int;
+pub const KSM_FEATURE_MAPS_SPOOF: c_int = uapi::KSM_FEATURE_MAPS_SPOOF as c_int;
+pub const KSM_FEATURE_STATFS_SPOOF: c_int = uapi::KSM_FEATURE_STATFS_SPOOF as c_int;
+pub const KSM_FEATURE_FAKE_MOUNTINFO: c_int = uapi::KSM_FEATURE_FAKE_MOUNTINFO as c_int;
+
+#[allow(clippy::unnecessary_cast)]
+const KSM_IOC_MAGIC: u8 = uapi::KSM_IOC_MAGIC as u8;
+
+type KasumiIoctlRequest = Opcode;
+
+pub type KasumiSyscallArg = uapi::kasumi_syscall_arg;
+
+impl uapi::kasumi_syscall_arg {
     fn new(src: &CString, target: Option<&CString>, type_: c_int) -> Self {
         Self {
             src: src.as_ptr(),
@@ -81,22 +82,11 @@ impl HymoSyscallArg {
     }
 }
 
-#[repr(C)]
-#[derive(Clone, Copy, Debug)]
-pub struct HymoSyscallListArg {
-    pub buf: *mut c_char,
-    pub size: usize,
-}
+pub type KasumiSyscallListArg = uapi::kasumi_syscall_list_arg;
 
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default)]
-pub struct HymoUidListArg {
-    pub count: u32,
-    pub reserved: u32,
-    pub uids: u64,
-}
+pub type KasumiUidListArg = uapi::kasumi_uid_list_arg;
 
-impl HymoUidListArg {
+impl uapi::kasumi_uid_list_arg {
     pub fn from_slice(uids: &[u32]) -> Self {
         Self {
             count: uids.len() as u32,
@@ -110,32 +100,13 @@ impl HymoUidListArg {
     }
 }
 
-#[repr(C)]
-#[derive(Clone, Copy, Debug)]
-pub struct HymoSpoofKstat {
-    pub target_ino: c_ulong,
-    pub target_pathname: [c_char; HYMO_MAX_LEN_PATHNAME],
-    pub spoofed_ino: c_ulong,
-    pub spoofed_dev: c_ulong,
-    pub spoofed_nlink: c_uint,
-    pub spoofed_size: i64,
-    pub spoofed_atime_sec: c_long,
-    pub spoofed_atime_nsec: c_long,
-    pub spoofed_mtime_sec: c_long,
-    pub spoofed_mtime_nsec: c_long,
-    pub spoofed_ctime_sec: c_long,
-    pub spoofed_ctime_nsec: c_long,
-    pub spoofed_blksize: c_ulong,
-    pub spoofed_blocks: u64,
-    pub is_static: c_int,
-    pub err: c_int,
-}
+pub type KasumiSpoofKstat = uapi::kasumi_spoof_kstat;
 
-impl Default for HymoSpoofKstat {
+impl Default for uapi::kasumi_spoof_kstat {
     fn default() -> Self {
         Self {
             target_ino: 0,
-            target_pathname: [0; HYMO_MAX_LEN_PATHNAME],
+            target_pathname: [0; KSM_MAX_LEN_PATHNAME],
             spoofed_ino: 0,
             spoofed_dev: 0,
             spoofed_nlink: 0,
@@ -154,7 +125,7 @@ impl Default for HymoSpoofKstat {
     }
 }
 
-impl HymoSpoofKstat {
+impl uapi::kasumi_spoof_kstat {
     pub fn new(target_ino: c_ulong, target_pathname: impl AsRef<Path>) -> Result<Self> {
         let mut value = Self {
             target_ino,
@@ -177,33 +148,23 @@ impl HymoSpoofKstat {
     }
 }
 
-#[repr(C)]
-#[derive(Clone, Copy, Debug)]
-pub struct HymoSpoofUname {
-    pub sysname: [c_char; HYMO_UNAME_LEN],
-    pub nodename: [c_char; HYMO_UNAME_LEN],
-    pub release: [c_char; HYMO_UNAME_LEN],
-    pub version: [c_char; HYMO_UNAME_LEN],
-    pub machine: [c_char; HYMO_UNAME_LEN],
-    pub domainname: [c_char; HYMO_UNAME_LEN],
-    pub err: c_int,
-}
+pub type KasumiSpoofUname = uapi::kasumi_spoof_uname;
 
-impl Default for HymoSpoofUname {
+impl Default for uapi::kasumi_spoof_uname {
     fn default() -> Self {
         Self {
-            sysname: [0; HYMO_UNAME_LEN],
-            nodename: [0; HYMO_UNAME_LEN],
-            release: [0; HYMO_UNAME_LEN],
-            version: [0; HYMO_UNAME_LEN],
-            machine: [0; HYMO_UNAME_LEN],
-            domainname: [0; HYMO_UNAME_LEN],
+            sysname: [0; KSM_UNAME_LEN],
+            nodename: [0; KSM_UNAME_LEN],
+            release: [0; KSM_UNAME_LEN],
+            version: [0; KSM_UNAME_LEN],
+            machine: [0; KSM_UNAME_LEN],
+            domainname: [0; KSM_UNAME_LEN],
             err: 0,
         }
     }
 }
 
-impl HymoSpoofUname {
+impl uapi::kasumi_spoof_uname {
     pub fn new(release: &str, version: &str) -> Result<Self> {
         let mut value = Self::default();
         value.set_release(release)?;
@@ -244,23 +205,18 @@ impl HymoSpoofUname {
     }
 }
 
-#[repr(C)]
-#[derive(Clone, Copy, Debug)]
-pub struct HymoSpoofCmdline {
-    pub cmdline: [c_char; HYMO_FAKE_CMDLINE_SIZE],
-    pub err: c_int,
-}
+pub type KasumiSpoofCmdline = uapi::kasumi_spoof_cmdline;
 
-impl Default for HymoSpoofCmdline {
+impl Default for uapi::kasumi_spoof_cmdline {
     fn default() -> Self {
         Self {
-            cmdline: [0; HYMO_FAKE_CMDLINE_SIZE],
+            cmdline: [0; KSM_FAKE_CMDLINE_SIZE],
             err: 0,
         }
     }
 }
 
-impl HymoSpoofCmdline {
+impl uapi::kasumi_spoof_cmdline {
     pub fn new(cmdline: &str) -> Result<Self> {
         let mut value = Self::default();
         value.set_cmdline(cmdline)?;
@@ -276,31 +232,22 @@ impl HymoSpoofCmdline {
     }
 }
 
-#[repr(C)]
-#[derive(Clone, Copy, Debug)]
-pub struct HymoMapsRule {
-    pub target_ino: c_ulong,
-    pub target_dev: c_ulong,
-    pub spoofed_ino: c_ulong,
-    pub spoofed_dev: c_ulong,
-    pub spoofed_pathname: [c_char; HYMO_MAX_LEN_PATHNAME],
-    pub err: c_int,
-}
+pub type KasumiMapsRule = uapi::kasumi_maps_rule;
 
-impl Default for HymoMapsRule {
+impl Default for uapi::kasumi_maps_rule {
     fn default() -> Self {
         Self {
             target_ino: 0,
             target_dev: 0,
             spoofed_ino: 0,
             spoofed_dev: 0,
-            spoofed_pathname: [0; HYMO_MAX_LEN_PATHNAME],
+            spoofed_pathname: [0; KSM_MAX_LEN_PATHNAME],
             err: 0,
         }
     }
 }
 
-impl HymoMapsRule {
+impl uapi::kasumi_maps_rule {
     pub fn new(
         target_ino: c_ulong,
         target_dev: c_ulong,
@@ -332,25 +279,19 @@ impl HymoMapsRule {
     }
 }
 
-#[repr(C)]
-#[derive(Clone, Copy, Debug)]
-pub struct HymoMountHideArg {
-    pub enable: c_int,
-    pub path_pattern: [c_char; HYMO_MAX_LEN_PATHNAME],
-    pub err: c_int,
-}
+pub type KasumiMountHideArg = uapi::kasumi_mount_hide_arg;
 
-impl Default for HymoMountHideArg {
+impl Default for uapi::kasumi_mount_hide_arg {
     fn default() -> Self {
         Self {
             enable: 0,
-            path_pattern: [0; HYMO_MAX_LEN_PATHNAME],
+            path_pattern: [0; KSM_MAX_LEN_PATHNAME],
             err: 0,
         }
     }
 }
 
-impl HymoMountHideArg {
+impl uapi::kasumi_mount_hide_arg {
     pub fn new(enable: bool, path_pattern: Option<&Path>) -> Result<Self> {
         let mut value = Self {
             enable: if enable { 1 } else { 0 },
@@ -375,25 +316,19 @@ impl HymoMountHideArg {
     }
 }
 
-#[repr(C)]
-#[derive(Clone, Copy, Debug)]
-pub struct HymoMapsSpoofArg {
-    pub enable: c_int,
-    pub reserved: [c_char; size_of::<HymoMapsRule>()],
-    pub err: c_int,
-}
+pub type KasumiMapsSpoofArg = uapi::kasumi_maps_spoof_arg;
 
-impl Default for HymoMapsSpoofArg {
+impl Default for uapi::kasumi_maps_spoof_arg {
     fn default() -> Self {
         Self {
             enable: 0,
-            reserved: [0; size_of::<HymoMapsRule>()],
+            reserved: [0; size_of::<KasumiMapsRule>()],
             err: 0,
         }
     }
 }
 
-impl HymoMapsSpoofArg {
+impl uapi::kasumi_maps_spoof_arg {
     pub fn new(enable: bool) -> Self {
         Self {
             enable: if enable { 1 } else { 0 },
@@ -402,27 +337,20 @@ impl HymoMapsSpoofArg {
     }
 }
 
-#[repr(C)]
-#[derive(Clone, Copy, Debug)]
-pub struct HymoStatfsSpoofArg {
-    pub enable: c_int,
-    pub path: [c_char; HYMO_MAX_LEN_PATHNAME],
-    pub spoof_f_type: c_ulong,
-    pub err: c_int,
-}
+pub type KasumiStatfsSpoofArg = uapi::kasumi_statfs_spoof_arg;
 
-impl Default for HymoStatfsSpoofArg {
+impl Default for uapi::kasumi_statfs_spoof_arg {
     fn default() -> Self {
         Self {
             enable: 0,
-            path: [0; HYMO_MAX_LEN_PATHNAME],
+            path: [0; KSM_MAX_LEN_PATHNAME],
             spoof_f_type: 0,
             err: 0,
         }
     }
 }
 
-impl HymoStatfsSpoofArg {
+impl uapi::kasumi_statfs_spoof_arg {
     pub fn new(enable: bool) -> Self {
         Self {
             enable: if enable { 1 } else { 0 },
@@ -458,63 +386,66 @@ impl HymoStatfsSpoofArg {
     }
 }
 
-pub const HYMO_IOC_ADD_RULE: HymoIoctlRequest =
-    ioctl::opcode::write::<HymoSyscallArg>(HYMO_IOC_MAGIC, 1);
-pub const HYMO_IOC_DEL_RULE: HymoIoctlRequest =
-    ioctl::opcode::write::<HymoSyscallArg>(HYMO_IOC_MAGIC, 2);
-pub const HYMO_IOC_HIDE_RULE: HymoIoctlRequest =
-    ioctl::opcode::write::<HymoSyscallArg>(HYMO_IOC_MAGIC, 3);
-pub const HYMO_IOC_CLEAR_ALL: HymoIoctlRequest = ioctl::opcode::none(HYMO_IOC_MAGIC, 5);
-pub const HYMO_IOC_GET_VERSION: HymoIoctlRequest = ioctl::opcode::read::<c_int>(HYMO_IOC_MAGIC, 6);
-pub const HYMO_IOC_LIST_RULES: HymoIoctlRequest =
-    ioctl::opcode::read_write::<HymoSyscallListArg>(HYMO_IOC_MAGIC, 7);
-pub const HYMO_IOC_SET_DEBUG: HymoIoctlRequest = ioctl::opcode::write::<c_int>(HYMO_IOC_MAGIC, 8);
-pub const HYMO_IOC_REORDER_MNT_ID: HymoIoctlRequest = ioctl::opcode::none(HYMO_IOC_MAGIC, 9);
-pub const HYMO_IOC_SET_STEALTH: HymoIoctlRequest =
-    ioctl::opcode::write::<c_int>(HYMO_IOC_MAGIC, 10);
-pub const HYMO_IOC_HIDE_OVERLAY_XATTRS: HymoIoctlRequest =
-    ioctl::opcode::write::<HymoSyscallArg>(HYMO_IOC_MAGIC, 11);
-pub const HYMO_IOC_ADD_MERGE_RULE: HymoIoctlRequest =
-    ioctl::opcode::write::<HymoSyscallArg>(HYMO_IOC_MAGIC, 12);
-pub const HYMO_IOC_SET_MIRROR_PATH: HymoIoctlRequest =
-    ioctl::opcode::write::<HymoSyscallArg>(HYMO_IOC_MAGIC, 14);
-pub const HYMO_IOC_ADD_SPOOF_KSTAT: HymoIoctlRequest =
-    ioctl::opcode::write::<HymoSpoofKstat>(HYMO_IOC_MAGIC, 15);
-pub const HYMO_IOC_UPDATE_SPOOF_KSTAT: HymoIoctlRequest =
-    ioctl::opcode::write::<HymoSpoofKstat>(HYMO_IOC_MAGIC, 16);
-pub const HYMO_IOC_SET_UNAME: HymoIoctlRequest =
-    ioctl::opcode::write::<HymoSpoofUname>(HYMO_IOC_MAGIC, 17);
-pub const HYMO_IOC_SET_CMDLINE: HymoIoctlRequest =
-    ioctl::opcode::write::<HymoSpoofCmdline>(HYMO_IOC_MAGIC, 18);
-pub const HYMO_IOC_GET_FEATURES: HymoIoctlRequest =
-    ioctl::opcode::read::<c_int>(HYMO_IOC_MAGIC, 19);
-pub const HYMO_IOC_SET_ENABLED: HymoIoctlRequest =
-    ioctl::opcode::write::<c_int>(HYMO_IOC_MAGIC, 20);
-pub const HYMO_IOC_SET_HIDE_UIDS: HymoIoctlRequest =
-    ioctl::opcode::write::<HymoUidListArg>(HYMO_IOC_MAGIC, 21);
-pub const HYMO_IOC_GET_HOOKS: HymoIoctlRequest =
-    ioctl::opcode::read_write::<HymoSyscallListArg>(HYMO_IOC_MAGIC, 22);
-pub const HYMO_IOC_ADD_MAPS_RULE: HymoIoctlRequest =
-    ioctl::opcode::write::<HymoMapsRule>(HYMO_IOC_MAGIC, 23);
-pub const HYMO_IOC_CLEAR_MAPS_RULES: HymoIoctlRequest = ioctl::opcode::none(HYMO_IOC_MAGIC, 24);
-pub const HYMO_IOC_SET_MOUNT_HIDE: HymoIoctlRequest =
-    ioctl::opcode::write::<HymoMountHideArg>(HYMO_IOC_MAGIC, 25);
-pub const HYMO_IOC_SET_MAPS_SPOOF: HymoIoctlRequest =
-    ioctl::opcode::write::<HymoMapsSpoofArg>(HYMO_IOC_MAGIC, 26);
-pub const HYMO_IOC_SET_STATFS_SPOOF: HymoIoctlRequest =
-    ioctl::opcode::write::<HymoStatfsSpoofArg>(HYMO_IOC_MAGIC, 27);
+pub const KSM_IOC_ADD_RULE: KasumiIoctlRequest =
+    ioctl::opcode::write::<KasumiSyscallArg>(KSM_IOC_MAGIC, 1);
+pub const KSM_IOC_DEL_RULE: KasumiIoctlRequest =
+    ioctl::opcode::write::<KasumiSyscallArg>(KSM_IOC_MAGIC, 2);
+pub const KSM_IOC_HIDE_RULE: KasumiIoctlRequest =
+    ioctl::opcode::write::<KasumiSyscallArg>(KSM_IOC_MAGIC, 3);
+pub const KSM_IOC_CLEAR_ALL: KasumiIoctlRequest = ioctl::opcode::none(KSM_IOC_MAGIC, 5);
+pub const KSM_IOC_GET_VERSION: KasumiIoctlRequest = ioctl::opcode::read::<c_int>(KSM_IOC_MAGIC, 6);
+pub const KSM_IOC_LIST_RULES: KasumiIoctlRequest =
+    ioctl::opcode::read_write::<KasumiSyscallListArg>(KSM_IOC_MAGIC, 7);
+pub const KSM_IOC_SET_DEBUG: KasumiIoctlRequest = ioctl::opcode::write::<c_int>(KSM_IOC_MAGIC, 8);
+pub const KSM_IOC_REORDER_MNT_ID: KasumiIoctlRequest = ioctl::opcode::none(KSM_IOC_MAGIC, 9);
+pub const KSM_IOC_SET_STEALTH: KasumiIoctlRequest =
+    ioctl::opcode::write::<c_int>(KSM_IOC_MAGIC, 10);
+pub const KSM_IOC_HIDE_OVERLAY_XATTRS: KasumiIoctlRequest =
+    ioctl::opcode::write::<KasumiSyscallArg>(KSM_IOC_MAGIC, 11);
+pub const KSM_IOC_MERGE_RULE: KasumiIoctlRequest =
+    ioctl::opcode::write::<KasumiSyscallArg>(KSM_IOC_MAGIC, 12);
+pub const KSM_IOC_ADD_MERGE_RULE: KasumiIoctlRequest = KSM_IOC_MERGE_RULE;
+pub const KSM_IOC_SET_MIRROR_PATH: KasumiIoctlRequest =
+    ioctl::opcode::write::<KasumiSyscallArg>(KSM_IOC_MAGIC, 14);
+pub const KSM_IOC_ADD_SPOOF_KSTAT: KasumiIoctlRequest =
+    ioctl::opcode::write::<KasumiSpoofKstat>(KSM_IOC_MAGIC, 15);
+pub const KSM_IOC_UPDATE_SPOOF_KSTAT: KasumiIoctlRequest =
+    ioctl::opcode::write::<KasumiSpoofKstat>(KSM_IOC_MAGIC, 16);
+pub const KSM_IOC_SET_UNAME: KasumiIoctlRequest =
+    ioctl::opcode::write::<KasumiSpoofUname>(KSM_IOC_MAGIC, 17);
+pub const KSM_IOC_SET_CMDLINE: KasumiIoctlRequest =
+    ioctl::opcode::write::<KasumiSpoofCmdline>(KSM_IOC_MAGIC, 18);
+pub const KSM_IOC_GET_FEATURES: KasumiIoctlRequest =
+    ioctl::opcode::read::<c_int>(KSM_IOC_MAGIC, 19);
+pub const KSM_IOC_SET_ENABLED: KasumiIoctlRequest =
+    ioctl::opcode::write::<c_int>(KSM_IOC_MAGIC, 20);
+pub const KSM_IOC_SET_HIDE_UIDS: KasumiIoctlRequest =
+    ioctl::opcode::write::<KasumiUidListArg>(KSM_IOC_MAGIC, 21);
+pub const KSM_IOC_GET_HOOKS: KasumiIoctlRequest =
+    ioctl::opcode::read_write::<KasumiSyscallListArg>(KSM_IOC_MAGIC, 22);
+pub const KSM_IOC_ADD_MAPS_RULE: KasumiIoctlRequest =
+    ioctl::opcode::write::<KasumiMapsRule>(KSM_IOC_MAGIC, 23);
+pub const KSM_IOC_CLEAR_MAPS_RULES: KasumiIoctlRequest = ioctl::opcode::none(KSM_IOC_MAGIC, 24);
+pub const KSM_IOC_SET_MOUNT_HIDE: KasumiIoctlRequest =
+    ioctl::opcode::write::<KasumiMountHideArg>(KSM_IOC_MAGIC, 25);
+pub const KSM_IOC_SET_MAPS_SPOOF: KasumiIoctlRequest =
+    ioctl::opcode::write::<KasumiMapsSpoofArg>(KSM_IOC_MAGIC, 26);
+pub const KSM_IOC_SET_STATFS_SPOOF: KasumiIoctlRequest =
+    ioctl::opcode::write::<KasumiStatfsSpoofArg>(KSM_IOC_MAGIC, 27);
+pub const KSM_IOC_SET_UNAME_GLOBAL: KasumiIoctlRequest =
+    ioctl::opcode::write::<KasumiSpoofUname>(KSM_IOC_MAGIC, 28);
 
-struct HymoIoctlNoArg {
-    request: HymoIoctlRequest,
+struct KasumiIoctlNoArg {
+    request: KasumiIoctlRequest,
 }
 
-impl HymoIoctlNoArg {
-    const fn new(request: HymoIoctlRequest) -> Self {
+impl KasumiIoctlNoArg {
+    const fn new(request: KasumiIoctlRequest) -> Self {
         Self { request }
     }
 }
 
-unsafe impl Ioctl for HymoIoctlNoArg {
+unsafe impl Ioctl for KasumiIoctlNoArg {
     type Output = ();
 
     const IS_MUTATING: bool = false;
@@ -532,18 +463,18 @@ unsafe impl Ioctl for HymoIoctlNoArg {
     }
 }
 
-struct HymoIoctlArg<'a, T> {
-    request: HymoIoctlRequest,
+struct KasumiIoctlArg<'a, T> {
+    request: KasumiIoctlRequest,
     arg: &'a mut T,
 }
 
-impl<'a, T> HymoIoctlArg<'a, T> {
-    fn new(request: HymoIoctlRequest, arg: &'a mut T) -> Self {
+impl<'a, T> KasumiIoctlArg<'a, T> {
+    fn new(request: KasumiIoctlRequest, arg: &'a mut T) -> Self {
         Self { request, arg }
     }
 }
 
-unsafe impl<T> Ioctl for HymoIoctlArg<'_, T> {
+unsafe impl<T> Ioctl for KasumiIoctlArg<'_, T> {
     type Output = ();
 
     const IS_MUTATING: bool = true;
@@ -582,29 +513,32 @@ pub fn status_name(status: KasumiStatus) -> &'static str {
 pub fn feature_names(bits: c_int) -> Vec<String> {
     let mut names = Vec::new();
 
-    if bits & HYMO_FEATURE_KSTAT_SPOOF != 0 {
+    if bits & KSM_FEATURE_KSTAT_SPOOF != 0 {
         names.push("kstat_spoof".to_string());
     }
-    if bits & HYMO_FEATURE_UNAME_SPOOF != 0 {
+    if bits & KSM_FEATURE_UNAME_SPOOF != 0 {
         names.push("uname_spoof".to_string());
     }
-    if bits & HYMO_FEATURE_CMDLINE_SPOOF != 0 {
+    if bits & KSM_FEATURE_CMDLINE_SPOOF != 0 {
         names.push("cmdline_spoof".to_string());
     }
-    if bits & HYMO_FEATURE_SELINUX_BYPASS != 0 {
+    if bits & KSM_FEATURE_SELINUX_BYPASS != 0 {
         names.push("selinux_bypass".to_string());
     }
-    if bits & HYMO_FEATURE_MERGE_DIR != 0 {
+    if bits & KSM_FEATURE_MERGE_DIR != 0 {
         names.push("merge_dir".to_string());
     }
-    if bits & HYMO_FEATURE_MOUNT_HIDE != 0 {
+    if bits & KSM_FEATURE_MOUNT_HIDE != 0 {
         names.push("mount_hide".to_string());
     }
-    if bits & HYMO_FEATURE_MAPS_SPOOF != 0 {
+    if bits & KSM_FEATURE_MAPS_SPOOF != 0 {
         names.push("maps_spoof".to_string());
     }
-    if bits & HYMO_FEATURE_STATFS_SPOOF != 0 {
+    if bits & KSM_FEATURE_STATFS_SPOOF != 0 {
         names.push("statfs_spoof".to_string());
+    }
+    if bits & KSM_FEATURE_FAKE_MOUNTINFO != 0 {
+        names.push("fake_mountinfo".to_string());
     }
 
     names
@@ -666,10 +600,6 @@ fn module_loaded() -> bool {
             || line.starts_with("kasumi_lkm\t")
             || line.starts_with("kasumi ")
             || line.starts_with("kasumi\t")
-            || line.starts_with("hymofs_lkm ")
-            || line.starts_with("hymofs_lkm\t")
-            || line.starts_with("hymofs ")
-            || line.starts_with("hymofs\t")
     })
 }
 
@@ -696,7 +626,7 @@ fn fetch_anon_fd() -> Result<c_int> {
 
         unsafe {
             libc::prctl(
-                HYMO_PRCTL_GET_FD,
+                KSM_PRCTL_GET_FD,
                 &mut fd as *mut c_int as libc::c_ulong,
                 0,
                 0,
@@ -720,10 +650,10 @@ fn fetch_anon_fd() -> Result<c_int> {
             }
             unsafe {
                 libc::syscall(
-                    HYMO_SYSCALL_NR,
-                    HYMO_MAGIC1 as libc::c_long,
-                    HYMO_MAGIC2 as libc::c_long,
-                    HYMO_CMD_GET_FD as libc::c_long,
+                    KSM_SYSCALL_NR,
+                    KSM_MAGIC1 as libc::c_long,
+                    KSM_MAGIC2 as libc::c_long,
+                    KSM_CMD_GET_FD as libc::c_long,
                     &mut fd as *mut c_int,
                 );
             }
@@ -766,7 +696,7 @@ fn fetch_anon_fd() -> Result<c_int> {
     bail!("Kasumi is only supported on linux/android")
 }
 
-fn ioctl_error_context(name: &str, request: HymoIoctlRequest, err: Errno) -> String {
+fn ioctl_error_context(name: &str, request: KasumiIoctlRequest, err: Errno) -> String {
     let hint = match err.raw_os_error() {
         libc::EINVAL => "invalid payload or protocol mismatch",
         libc::EOPNOTSUPP | libc::ENOTTY => "unsupported by the current kernel/module build",
@@ -780,7 +710,7 @@ fn ioctl_error_context(name: &str, request: HymoIoctlRequest, err: Errno) -> Str
     )
 }
 
-fn ioctl_noarg(name: &str, request: HymoIoctlRequest) -> Result<()> {
+fn ioctl_noarg(name: &str, request: KasumiIoctlRequest) -> Result<()> {
     crate::scoped_log!(
         debug,
         "kasumi:ioctl",
@@ -789,7 +719,7 @@ fn ioctl_noarg(name: &str, request: HymoIoctlRequest) -> Result<()> {
         request
     );
     let fd = unsafe { BorrowedFd::borrow_raw(fetch_anon_fd()?) };
-    let ioctl = HymoIoctlNoArg::new(request);
+    let ioctl = KasumiIoctlNoArg::new(request);
     match unsafe { ioctl::ioctl(fd, ioctl) } {
         Ok(()) => {
             crate::scoped_log!(
@@ -816,7 +746,7 @@ fn ioctl_noarg(name: &str, request: HymoIoctlRequest) -> Result<()> {
     }
 }
 
-fn ioctl_with_arg<T>(name: &str, request: HymoIoctlRequest, arg: &mut T) -> Result<()> {
+fn ioctl_with_arg<T>(name: &str, request: KasumiIoctlRequest, arg: &mut T) -> Result<()> {
     crate::scoped_log!(
         debug,
         "kasumi:ioctl",
@@ -825,7 +755,7 @@ fn ioctl_with_arg<T>(name: &str, request: HymoIoctlRequest, arg: &mut T) -> Resu
         request
     );
     let fd = unsafe { BorrowedFd::borrow_raw(fetch_anon_fd()?) };
-    let ioctl = HymoIoctlArg::new(request, arg);
+    let ioctl = KasumiIoctlArg::new(request, arg);
     match unsafe { ioctl::ioctl(fd, ioctl) } {
         Ok(()) => {
             crate::scoped_log!(
@@ -852,7 +782,7 @@ fn ioctl_with_arg<T>(name: &str, request: HymoIoctlRequest, arg: &mut T) -> Resu
     }
 }
 
-fn ioctl_with_bool(name: &str, request: HymoIoctlRequest, value: bool) -> Result<()> {
+fn ioctl_with_bool(name: &str, request: KasumiIoctlRequest, value: bool) -> Result<()> {
     let mut raw: c_int = if value { 1 } else { 0 };
     ioctl_with_arg(name, request, &mut raw)
 }
@@ -864,7 +794,7 @@ fn ensure_kernel_err(context: &str, kernel_err: c_int) -> Result<()> {
     Ok(())
 }
 
-fn list_ioctl(request: HymoIoctlRequest, capacity: usize, description: &str) -> Result<String> {
+fn list_ioctl(request: KasumiIoctlRequest, capacity: usize, description: &str) -> Result<String> {
     crate::scoped_log!(
         debug,
         "kasumi:list_ioctl",
@@ -874,7 +804,7 @@ fn list_ioctl(request: HymoIoctlRequest, capacity: usize, description: &str) -> 
         capacity
     );
     let mut buf = vec![0u8; capacity];
-    let mut arg = HymoSyscallListArg {
+    let mut arg = KasumiSyscallListArg {
         buf: buf.as_mut_ptr() as *mut c_char,
         size: buf.len(),
     };
@@ -895,7 +825,7 @@ fn list_ioctl(request: HymoIoctlRequest, capacity: usize, description: &str) -> 
 
 pub fn get_protocol_version() -> Result<c_int> {
     let mut version = 0;
-    ioctl_with_arg("get_version", HYMO_IOC_GET_VERSION, &mut version)?;
+    ioctl_with_arg("get_version", KSM_IOC_GET_VERSION, &mut version)?;
     Ok(version)
 }
 
@@ -916,8 +846,8 @@ pub fn check_status() -> KasumiStatus {
         KasumiStatus::NotPresent
     } else {
         match get_protocol_version() {
-            Ok(version) if version < HYMO_PROTOCOL_VERSION => KasumiStatus::KernelTooOld,
-            Ok(version) if version > HYMO_PROTOCOL_VERSION => KasumiStatus::ModuleTooOld,
+            Ok(version) if version < KSM_PROTOCOL_VERSION => KasumiStatus::KernelTooOld,
+            Ok(version) if version > KSM_PROTOCOL_VERSION => KasumiStatus::ModuleTooOld,
             Ok(_) => KasumiStatus::Available,
             Err(_) => KasumiStatus::NotPresent,
         }
@@ -945,33 +875,33 @@ pub fn can_operate() -> bool {
 }
 
 pub fn clear_rules() -> Result<()> {
-    ioctl_noarg("clear_rules", HYMO_IOC_CLEAR_ALL)
+    ioctl_noarg("clear_rules", KSM_IOC_CLEAR_ALL)
 }
 
 pub fn add_rule(virtual_path: &Path, backing_path: &Path, file_type: c_int) -> Result<()> {
     let src = cstring_from_path(virtual_path)?;
     let target = cstring_from_path(backing_path)?;
-    let mut arg = HymoSyscallArg::new(&src, Some(&target), file_type);
-    ioctl_with_arg("add_rule", HYMO_IOC_ADD_RULE, &mut arg)
+    let mut arg = KasumiSyscallArg::new(&src, Some(&target), file_type);
+    ioctl_with_arg("add_rule", KSM_IOC_ADD_RULE, &mut arg)
 }
 
 pub fn add_merge_rule(virtual_path: &Path, backing_path: &Path) -> Result<()> {
     let src = cstring_from_path(virtual_path)?;
     let target = cstring_from_path(backing_path)?;
-    let mut arg = HymoSyscallArg::new(&src, Some(&target), 0);
-    ioctl_with_arg("add_merge_rule", HYMO_IOC_ADD_MERGE_RULE, &mut arg)
+    let mut arg = KasumiSyscallArg::new(&src, Some(&target), 0);
+    ioctl_with_arg("add_merge_rule", KSM_IOC_ADD_MERGE_RULE, &mut arg)
 }
 
 pub fn delete_rule(virtual_path: &Path) -> Result<()> {
     let src = cstring_from_path(virtual_path)?;
-    let mut arg = HymoSyscallArg::new(&src, None, 0);
-    ioctl_with_arg("delete_rule", HYMO_IOC_DEL_RULE, &mut arg)
+    let mut arg = KasumiSyscallArg::new(&src, None, 0);
+    ioctl_with_arg("delete_rule", KSM_IOC_DEL_RULE, &mut arg)
 }
 
 pub fn hide_path(virtual_path: &Path) -> Result<()> {
     let src = cstring_from_path(virtual_path)?;
-    let mut arg = HymoSyscallArg::new(&src, None, 0);
-    ioctl_with_arg("hide_path", HYMO_IOC_HIDE_RULE, &mut arg)
+    let mut arg = KasumiSyscallArg::new(&src, None, 0);
+    ioctl_with_arg("hide_path", KSM_IOC_HIDE_RULE, &mut arg)
 }
 
 fn helper_rule_dtype(path: &Path) -> Result<Option<c_int>> {
@@ -1006,7 +936,7 @@ pub fn get_active_rules() -> Result<String> {
 }
 
 pub fn list_rules_with_capacity(capacity: usize) -> Result<String> {
-    list_ioctl(HYMO_IOC_LIST_RULES, capacity, "rule list")
+    list_ioctl(KSM_IOC_LIST_RULES, capacity, "rule list")
 }
 
 pub fn add_rules_from_directory(target_base: &Path, module_dir: &Path) -> Result<()> {
@@ -1086,78 +1016,85 @@ pub fn remove_rules_from_directory(target_base: &Path, module_dir: &Path) -> Res
 
 pub fn set_mirror_path(path: &Path) -> Result<()> {
     let src = cstring_from_path(path)?;
-    let mut arg = HymoSyscallArg::new(&src, None, 0);
-    ioctl_with_arg("set_mirror_path", HYMO_IOC_SET_MIRROR_PATH, &mut arg)
+    let mut arg = KasumiSyscallArg::new(&src, None, 0);
+    ioctl_with_arg("set_mirror_path", KSM_IOC_SET_MIRROR_PATH, &mut arg)
 }
 
 pub fn set_debug(enable: bool) -> Result<()> {
-    ioctl_with_bool("set_debug", HYMO_IOC_SET_DEBUG, enable)
+    ioctl_with_bool("set_debug", KSM_IOC_SET_DEBUG, enable)
 }
 
 pub fn set_stealth(enable: bool) -> Result<()> {
-    ioctl_with_bool("set_stealth", HYMO_IOC_SET_STEALTH, enable)
+    ioctl_with_bool("set_stealth", KSM_IOC_SET_STEALTH, enable)
 }
 
 pub fn set_enabled(enable: bool) -> Result<()> {
-    ioctl_with_bool("set_enabled", HYMO_IOC_SET_ENABLED, enable)
+    ioctl_with_bool("set_enabled", KSM_IOC_SET_ENABLED, enable)
 }
 
-pub fn add_spoof_kstat(rule: &HymoSpoofKstat) -> Result<()> {
+pub fn add_spoof_kstat(rule: &KasumiSpoofKstat) -> Result<()> {
     let mut rule = *rule;
-    ioctl_with_arg("add_spoof_kstat", HYMO_IOC_ADD_SPOOF_KSTAT, &mut rule)?;
+    ioctl_with_arg("add_spoof_kstat", KSM_IOC_ADD_SPOOF_KSTAT, &mut rule)?;
     ensure_kernel_err("Kasumi add_spoof_kstat", rule.err)
 }
 
-pub fn update_spoof_kstat(rule: &HymoSpoofKstat) -> Result<()> {
+pub fn update_spoof_kstat(rule: &KasumiSpoofKstat) -> Result<()> {
     let mut rule = *rule;
-    ioctl_with_arg("update_spoof_kstat", HYMO_IOC_UPDATE_SPOOF_KSTAT, &mut rule)?;
+    ioctl_with_arg("update_spoof_kstat", KSM_IOC_UPDATE_SPOOF_KSTAT, &mut rule)?;
     ensure_kernel_err("Kasumi update_spoof_kstat", rule.err)
 }
 
-pub fn set_uname(uname: &HymoSpoofUname) -> Result<()> {
+pub fn set_uname(uname: &KasumiSpoofUname) -> Result<()> {
     let mut uname = *uname;
-    ioctl_with_arg("set_uname", HYMO_IOC_SET_UNAME, &mut uname)?;
+    ioctl_with_arg("set_uname", KSM_IOC_SET_UNAME, &mut uname)?;
     ensure_kernel_err("Kasumi set_uname", uname.err)
 }
 
-pub fn set_cmdline(cmdline: &HymoSpoofCmdline) -> Result<()> {
+pub fn set_uname_global(uname: &KasumiSpoofUname) -> Result<()> {
+    let mut uname = *uname;
+    ioctl_with_arg("set_uname_global", KSM_IOC_SET_UNAME_GLOBAL, &mut uname)?;
+    ensure_kernel_err("Kasumi set_uname_global", uname.err)
+}
+
+pub fn restore_uname_global() -> Result<()> {
+    let uname = KasumiSpoofUname::default();
+    set_uname_global(&uname)
+}
+
+pub fn set_cmdline(cmdline: &KasumiSpoofCmdline) -> Result<()> {
     let mut cmdline = *cmdline;
     let fd = unsafe { BorrowedFd::borrow_raw(fetch_anon_fd()?) };
-    let ioctl = HymoIoctlArg::new(HYMO_IOC_SET_CMDLINE, &mut cmdline);
+    let ioctl = KasumiIoctlArg::new(KSM_IOC_SET_CMDLINE, &mut cmdline);
     if let Err(err) = unsafe { ioctl::ioctl(fd, ioctl) } {
-        let context = ioctl_error_context("set_cmdline", HYMO_IOC_SET_CMDLINE, err);
+        let context = ioctl_error_context("set_cmdline", KSM_IOC_SET_CMDLINE, err);
         return Err(anyhow::Error::new(err).context(context));
     }
     ensure_kernel_err("Kasumi set_cmdline", cmdline.err)
 }
 
 pub fn set_cmdline_str(cmdline: &str) -> Result<()> {
-    let cmdline = HymoSpoofCmdline::new(cmdline)?;
+    let cmdline = KasumiSpoofCmdline::new(cmdline)?;
     set_cmdline(&cmdline)
 }
 
 pub fn set_hide_uids(uids: &[u32]) -> Result<()> {
-    let mut arg = HymoUidListArg::from_slice(uids);
-    ioctl_with_arg("set_hide_uids", HYMO_IOC_SET_HIDE_UIDS, &mut arg)
+    let mut arg = KasumiUidListArg::from_slice(uids);
+    ioctl_with_arg("set_hide_uids", KSM_IOC_SET_HIDE_UIDS, &mut arg)
 }
 
 pub fn fix_mounts() -> Result<()> {
-    ioctl_noarg("fix_mounts", HYMO_IOC_REORDER_MNT_ID)
+    ioctl_noarg("fix_mounts", KSM_IOC_REORDER_MNT_ID)
 }
 
 pub fn hide_overlay_xattrs(path: &Path) -> Result<()> {
     let src = cstring_from_path(path)?;
-    let mut arg = HymoSyscallArg::new(&src, None, 0);
-    ioctl_with_arg(
-        "hide_overlay_xattrs",
-        HYMO_IOC_HIDE_OVERLAY_XATTRS,
-        &mut arg,
-    )
+    let mut arg = KasumiSyscallArg::new(&src, None, 0);
+    ioctl_with_arg("hide_overlay_xattrs", KSM_IOC_HIDE_OVERLAY_XATTRS, &mut arg)
 }
 
 pub fn get_features() -> Result<c_int> {
     let mut features = 0;
-    ioctl_with_arg("get_features", HYMO_IOC_GET_FEATURES, &mut features)?;
+    ioctl_with_arg("get_features", KSM_IOC_GET_FEATURES, &mut features)?;
     Ok(features)
 }
 
@@ -1166,49 +1103,49 @@ pub fn get_hooks() -> Result<String> {
 }
 
 pub fn get_hooks_with_capacity(capacity: usize) -> Result<String> {
-    list_ioctl(HYMO_IOC_GET_HOOKS, capacity, "hook list")
+    list_ioctl(KSM_IOC_GET_HOOKS, capacity, "hook list")
 }
 
-pub fn add_maps_rule(rule: &HymoMapsRule) -> Result<()> {
+pub fn add_maps_rule(rule: &KasumiMapsRule) -> Result<()> {
     let mut rule = *rule;
-    ioctl_with_arg("add_maps_rule", HYMO_IOC_ADD_MAPS_RULE, &mut rule)?;
+    ioctl_with_arg("add_maps_rule", KSM_IOC_ADD_MAPS_RULE, &mut rule)?;
     ensure_kernel_err("Kasumi add_maps_rule", rule.err)
 }
 
 pub fn clear_maps_rules() -> Result<()> {
-    ioctl_noarg("clear_maps_rules", HYMO_IOC_CLEAR_MAPS_RULES)
+    ioctl_noarg("clear_maps_rules", KSM_IOC_CLEAR_MAPS_RULES)
 }
 
 pub fn set_mount_hide(enable: bool) -> Result<()> {
-    let config = HymoMountHideArg::new(enable, None)?;
+    let config = KasumiMountHideArg::new(enable, None)?;
     set_mount_hide_config(&config)
 }
 
-pub fn set_mount_hide_config(config: &HymoMountHideArg) -> Result<()> {
+pub fn set_mount_hide_config(config: &KasumiMountHideArg) -> Result<()> {
     let mut config = *config;
-    ioctl_with_arg("set_mount_hide", HYMO_IOC_SET_MOUNT_HIDE, &mut config)?;
+    ioctl_with_arg("set_mount_hide", KSM_IOC_SET_MOUNT_HIDE, &mut config)?;
     ensure_kernel_err("Kasumi mount_hide", config.err)
 }
 
 pub fn set_maps_spoof(enable: bool) -> Result<()> {
-    let config = HymoMapsSpoofArg::new(enable);
+    let config = KasumiMapsSpoofArg::new(enable);
     set_maps_spoof_config(&config)
 }
 
-pub fn set_maps_spoof_config(config: &HymoMapsSpoofArg) -> Result<()> {
+pub fn set_maps_spoof_config(config: &KasumiMapsSpoofArg) -> Result<()> {
     let mut config = *config;
-    ioctl_with_arg("set_maps_spoof", HYMO_IOC_SET_MAPS_SPOOF, &mut config)?;
+    ioctl_with_arg("set_maps_spoof", KSM_IOC_SET_MAPS_SPOOF, &mut config)?;
     ensure_kernel_err("Kasumi maps_spoof", config.err)
 }
 
 pub fn set_statfs_spoof(enable: bool) -> Result<()> {
-    let config = HymoStatfsSpoofArg::new(enable);
+    let config = KasumiStatfsSpoofArg::new(enable);
     set_statfs_spoof_config(&config)
 }
 
-pub fn set_statfs_spoof_config(config: &HymoStatfsSpoofArg) -> Result<()> {
+pub fn set_statfs_spoof_config(config: &KasumiStatfsSpoofArg) -> Result<()> {
     let mut config = *config;
-    ioctl_with_arg("set_statfs_spoof", HYMO_IOC_SET_STATFS_SPOOF, &mut config)?;
+    ioctl_with_arg("set_statfs_spoof", KSM_IOC_SET_STATFS_SPOOF, &mut config)?;
     ensure_kernel_err("Kasumi statfs_spoof", config.err)
 }
 

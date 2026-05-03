@@ -74,6 +74,8 @@ export interface KasumiUnameConfig {
   domainname: string;
 }
 
+export type KasumiUnameMode = "scoped" | "global";
+
 export interface KernelUnameValues {
   release: string;
   version: string;
@@ -131,6 +133,7 @@ export interface KasumiConfig {
   mount_hide: KasumiMountHideConfig;
   statfs_spoof: KasumiStatfsSpoofConfig;
   hide_uids: number[];
+  uname_mode: KasumiUnameMode;
   uname: KasumiUnameConfig;
   uname_release: string;
   uname_version: string;

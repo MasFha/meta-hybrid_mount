@@ -67,10 +67,17 @@ interface RuntimeKasumiPayload {
 
 let ksuExec: KsuModule["exec"] | null = null;
 
-try {
-  const ksu = await import("kernelsu").catch(() => null);
-  ksuExec = ksu ? ksu.exec : null;
-} catch {}
+function hasKsuBridge(): boolean {
+  const bridge = (globalThis as { ksu?: unknown }).ksu;
+  return typeof bridge === "object" && bridge !== null && "exec" in bridge;
+}
+
+if (hasKsuBridge()) {
+  try {
+    const ksu = await import("kernelsu").catch(() => null);
+    ksuExec = ksu ? ksu.exec : null;
+  } catch {}
+}
 
 const shouldUseMock = import.meta.env.DEV && !ksuExec;
 const RESERVED_MODULE_DIRS = new Set([
@@ -115,6 +122,7 @@ export interface AppAPI {
   setKasumiHidexattr: (enabled: boolean) => Promise<void>;
   setKasumiDebug: (enabled: boolean) => Promise<void>;
   getOriginalKernelUname: () => Promise<KernelUnameValues>;
+  setKasumiUnameMode: (mode: "scoped" | "global") => Promise<void>;
   setKasumiUname: (uname: Partial<KasumiUnameConfig>) => Promise<void>;
   clearKasumiUname: () => Promise<void>;
   setKasumiCmdline: (value: string) => Promise<void>;
@@ -230,6 +238,10 @@ function normalizeKasumiUname(value: unknown): AppConfig["kasumi"]["uname"] {
   };
 }
 
+function normalizeKasumiUnameMode(value: unknown): AppConfig["kasumi"]["uname_mode"] {
+  return value === "global" ? "global" : "scoped";
+}
+
 function normalizeKasumiConfig(value: unknown): AppConfig["kasumi"] {
   const next = isRecord(value) ? value : {};
   const mountHide = isRecord(next.mount_hide) ? next.mount_hide : {};
@@ -278,6 +290,7 @@ function normalizeKasumiConfig(value: unknown): AppConfig["kasumi"] {
     hide_uids: Array.isArray(next.hide_uids)
       ? next.hide_uids.map((item) => toNonNegativeInt(item)).filter((item) => item >= 0)
       : [],
+    uname_mode: normalizeKasumiUnameMode(next.uname_mode),
     uname,
     uname_release: isString(next.uname_release) ? next.uname_release : uname.release,
     uname_version: isString(next.uname_version) ? next.uname_version : uname.version,
@@ -403,6 +416,7 @@ function serializeConfig(config: AppConfig): string {
       enable_maps_spoof: normalized.kasumi.enable_maps_spoof,
       enable_statfs_spoof: normalized.kasumi.enable_statfs_spoof,
       hide_uids: [...normalized.kasumi.hide_uids],
+      uname_mode: normalized.kasumi.uname_mode,
       cmdline_value: normalized.kasumi.cmdline_value,
       mount_hide: {
         enabled: normalized.kasumi.mount_hide.enabled,
@@ -650,6 +664,143 @@ function parseJsonArrayOutput(output: string, endpoint: string): string[] {
   throw new AppError(`Invalid ${endpoint} payload`);
 }
 
+function buildKasumiStatusFromPayload(
+  payload: unknown,
+  fallbackConfig: AppConfig["kasumi"],
+  fallbackState: RuntimeStatePayload,
+): KasumiStatus | null {
+  if (!isRecord(payload)) return null;
+
+  const lkmPayload = isRecord(payload.lkm) ? payload.lkm : {};
+  const configPayload = isRecord(payload.config)
+    ? payload.config
+    : fallbackConfig;
+  const runtimePayload = isRecord(payload.runtime) ? payload.runtime : {};
+
+  return {
+    status: isString(payload.status)
+      ? payload.status
+      : fallbackConfig.enabled
+        ? "unavailable"
+        : "disabled",
+    available: isBoolean(payload.available) ? payload.available : false,
+    protocol_version:
+      payload.protocol_version === null || isNumber(payload.protocol_version)
+        ? (payload.protocol_version as number | null | undefined) ?? null
+        : null,
+    feature_bits:
+      payload.feature_bits === null || isNumber(payload.feature_bits)
+        ? (payload.feature_bits as number | null | undefined) ?? null
+        : null,
+    feature_names: isStringArray(payload.feature_names)
+      ? payload.feature_names
+      : [],
+    hooks: isStringArray(payload.hooks) ? payload.hooks : [],
+    rule_count: toNonNegativeInt(payload.rule_count),
+    user_hide_rule_count: toNonNegativeInt(payload.user_hide_rule_count),
+    mirror_path: isString(payload.mirror_path)
+      ? payload.mirror_path
+      : fallbackConfig.mirror_path,
+    lkm: {
+      loaded: isBoolean(lkmPayload.loaded) ? lkmPayload.loaded : false,
+      module_name: isString(lkmPayload.module_name)
+        ? lkmPayload.module_name
+        : undefined,
+      autoload: isBoolean(lkmPayload.autoload)
+        ? lkmPayload.autoload
+        : fallbackConfig.lkm_autoload,
+      kmi_override: isString(lkmPayload.kmi_override)
+        ? lkmPayload.kmi_override
+        : fallbackConfig.lkm_kmi_override,
+      current_kmi: isString(lkmPayload.current_kmi)
+        ? lkmPayload.current_kmi
+        : "",
+      search_dir: isString(lkmPayload.search_dir)
+        ? lkmPayload.search_dir
+        : fallbackConfig.lkm_dir,
+      module_file: isString(lkmPayload.module_file)
+        ? lkmPayload.module_file
+        : undefined,
+      last_error:
+        lkmPayload.last_error === null || isString(lkmPayload.last_error)
+          ? (lkmPayload.last_error as string | null | undefined) ?? null
+          : null,
+    },
+    config: normalizeKasumiConfig(configPayload),
+    runtime: {
+      snapshot: isRecord(runtimePayload.snapshot)
+        ? (runtimePayload.snapshot as Record<string, unknown>)
+        : isRecord(fallbackState.kasumi)
+          ? (fallbackState.kasumi as Record<string, unknown>)
+          : {},
+      kasumi_modules: isStringArray(runtimePayload.kasumi_modules)
+        ? runtimePayload.kasumi_modules
+        : isStringArray(fallbackState.kasumi_modules)
+          ? fallbackState.kasumi_modules
+          : [],
+    },
+  };
+}
+
+function buildKasumiStatusFromRuntimeState(
+  config: AppConfig["kasumi"],
+  state: RuntimeStatePayload,
+): KasumiStatus {
+  const runtime = isRecord(state.kasumi)
+    ? (state.kasumi as RuntimeKasumiPayload)
+    : {};
+
+  return {
+    status: isString(runtime.status)
+      ? runtime.status
+      : config.enabled
+        ? "unavailable"
+        : "disabled",
+    available: isBoolean(runtime.available) ? runtime.available : false,
+    protocol_version:
+      runtime.protocol_version === null || isNumber(runtime.protocol_version)
+        ? (runtime.protocol_version as number | null | undefined) ?? null
+        : null,
+    feature_bits:
+      runtime.feature_bits === null || isNumber(runtime.feature_bits)
+        ? (runtime.feature_bits as number | null | undefined) ?? null
+        : null,
+    feature_names: isStringArray(runtime.feature_names)
+      ? runtime.feature_names
+      : [],
+    hooks: isStringArray(runtime.hooks) ? runtime.hooks : [],
+    rule_count: toNonNegativeInt(runtime.rule_count),
+    user_hide_rule_count: toNonNegativeInt(runtime.user_hide_rule_count),
+    mirror_path: isString(runtime.mirror_path)
+      ? runtime.mirror_path
+      : config.mirror_path,
+    lkm: {
+      loaded: isBoolean(runtime.lkm_loaded) ? runtime.lkm_loaded : false,
+      module_name:
+        isBoolean(runtime.lkm_loaded) && runtime.lkm_loaded
+          ? KASUMI_MODULE_NAME
+          : undefined,
+      autoload: config.lkm_autoload,
+      kmi_override: config.lkm_kmi_override,
+      current_kmi: isString(runtime.lkm_current_kmi)
+        ? runtime.lkm_current_kmi
+        : "",
+      search_dir: config.lkm_dir,
+      module_file: undefined,
+      last_error: null,
+    },
+    config,
+    runtime: {
+      snapshot: isRecord(state.kasumi)
+        ? (state.kasumi as Record<string, unknown>)
+        : {},
+      kasumi_modules: isStringArray(state.kasumi_modules)
+        ? state.kasumi_modules
+        : [],
+    },
+  };
+}
+
 const RealAPI: AppAPI = {
   loadConfig: async (): Promise<AppConfig> => {
     return loadConfigFromFile();
@@ -790,54 +941,17 @@ const RealAPI: AppAPI = {
       loadConfigFromFile(),
       loadRuntimeState(),
     ]);
-    const runtime = isRecord(state.kasumi)
-      ? (state.kasumi as RuntimeKasumiPayload)
-      : {};
-
-    return {
-      status: isString(runtime.status)
-        ? runtime.status
-        : config.kasumi.enabled
-          ? "unavailable"
-          : "disabled",
-      available: isBoolean(runtime.available) ? runtime.available : false,
-      protocol_version:
-        runtime.protocol_version === null || isNumber(runtime.protocol_version)
-          ? (runtime.protocol_version as number | null | undefined) ?? null
-          : null,
-      feature_bits:
-        runtime.feature_bits === null || isNumber(runtime.feature_bits)
-          ? (runtime.feature_bits as number | null | undefined) ?? null
-          : null,
-      feature_names: isStringArray(runtime.feature_names) ? runtime.feature_names : [],
-      hooks: isStringArray(runtime.hooks) ? runtime.hooks : [],
-      rule_count: toNonNegativeInt(runtime.rule_count),
-      user_hide_rule_count: toNonNegativeInt(runtime.user_hide_rule_count),
-      mirror_path: isString(runtime.mirror_path)
-        ? runtime.mirror_path
-        : config.kasumi.mirror_path,
-      lkm: {
-        loaded: isBoolean(runtime.lkm_loaded) ? runtime.lkm_loaded : false,
-        module_name: isBoolean(runtime.lkm_loaded) && runtime.lkm_loaded
-          ? KASUMI_MODULE_NAME
-          : undefined,
-        autoload: config.kasumi.lkm_autoload,
-        kmi_override: config.kasumi.lkm_kmi_override,
-        current_kmi: isString(runtime.lkm_current_kmi)
-          ? runtime.lkm_current_kmi
-          : "",
-        search_dir: config.kasumi.lkm_dir,
-        module_file: undefined,
-        last_error: null,
-      },
-      config: config.kasumi,
-      runtime: {
-        snapshot: isRecord(state.kasumi)
-          ? (state.kasumi as Record<string, unknown>)
-          : {},
-        kasumi_modules: isStringArray(state.kasumi_modules) ? state.kasumi_modules : [],
-      },
-    };
+    try {
+      const payload = JSON.parse(
+        await runCommandExpectOk(`${PATHS.BINARY} kasumi status`),
+      ) as unknown;
+      return (
+        buildKasumiStatusFromPayload(payload, config.kasumi, state) ??
+        buildKasumiStatusFromRuntimeState(config.kasumi, state)
+      );
+    } catch {
+      return buildKasumiStatusFromRuntimeState(config.kasumi, state);
+    }
   },
   setKasumiEnabled: async (enabled: boolean): Promise<void> => {
     await mutateConfig((config) => {
@@ -866,6 +980,11 @@ const RealAPI: AppAPI = {
       throw new AppError("Failed to read original kernel uname values");
     }
     return { release, version };
+  },
+  setKasumiUnameMode: async (mode: "scoped" | "global"): Promise<void> => {
+    await mutateConfig((config) => {
+      config.kasumi.uname_mode = normalizeKasumiUnameMode(mode);
+    });
   },
   setKasumiUname: async (uname: Partial<KasumiUnameConfig>): Promise<void> => {
     await mutateConfig((config) => {

@@ -94,6 +94,14 @@ pub struct KasumiUnameConfig {
     pub domainname: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum KasumiUnameMode {
+    #[default]
+    Scoped,
+    Global,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct KasumiMountHideConfig {
     #[serde(default)]
@@ -143,6 +151,8 @@ pub struct KasumiConfig {
     #[serde(default)]
     pub hide_uids: Vec<u32>,
     #[serde(default)]
+    pub uname_mode: KasumiUnameMode,
+    #[serde(default)]
     pub uname: KasumiUnameConfig,
     #[serde(default)]
     pub cmdline_value: String,
@@ -169,6 +179,7 @@ impl Default for KasumiConfig {
             mount_hide: KasumiMountHideConfig::default(),
             statfs_spoof: KasumiStatfsSpoofConfig::default(),
             hide_uids: Vec::new(),
+            uname_mode: KasumiUnameMode::Scoped,
             uname: KasumiUnameConfig::default(),
             cmdline_value: String::new(),
             kstat_rules: Vec::new(),
@@ -193,7 +204,7 @@ pub struct Config {
     pub enable_overlay_fallback: bool,
     #[serde(default)]
     pub default_mode: DefaultMode,
-    #[serde(default, alias = "hymofs")]
+    #[serde(default)]
     pub kasumi: KasumiConfig,
     #[serde(default)]
     pub rules: HashMap<String, ModuleRules>,

@@ -12,31 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
+use std::{fs, path::Path};
 
 use anyhow::{Context, Result, bail};
 
-use crate::{
-    conf::{cli::Cli, loader, schema::Config},
-    defs,
-};
-
-fn migrate_legacy_kasumi_lkm_dir(config: &mut Config) {
-    let legacy_lkm_dir = Path::new(defs::HYBRID_MOUNT_MODULE_DIR).join("hymofs_lkm");
-    if config.kasumi.lkm_dir == legacy_lkm_dir {
-        crate::scoped_log!(
-            info,
-            "conf:store:load_merged",
-            "migrated legacy Kasumi LKM dir: from={}, to={}",
-            legacy_lkm_dir.display(),
-            defs::KASUMI_LKM_DIR
-        );
-        config.kasumi.lkm_dir = PathBuf::from(defs::KASUMI_LKM_DIR);
-    }
-}
+use crate::conf::{cli::Cli, loader, schema::Config};
 
 fn ensure_parent_dir(path: &Path) -> Result<()> {
     if let Some(parent) = path.parent() {
@@ -54,7 +34,7 @@ fn load_merged_config(main_path: &Path, allow_missing_main: bool) -> Result<Conf
         allow_missing_main
     );
 
-    let mut config = if main_path.exists() {
+    let config = if main_path.exists() {
         let content = fs::read_to_string(main_path)
             .with_context(|| format!("failed to read config file {}", main_path.display()))?;
         toml::from_str::<Config>(&content)
@@ -77,8 +57,6 @@ fn load_merged_config(main_path: &Path, allow_missing_main: bool) -> Result<Conf
         bail!("config file not found: {}", main_path.display());
     };
 
-    migrate_legacy_kasumi_lkm_dir(&mut config);
-
     crate::scoped_log!(
         debug,
         "conf:store:load_merged",
@@ -96,9 +74,7 @@ impl Config {
 
     pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         let main_path = path.as_ref();
-        let mut config = self.clone();
-        migrate_legacy_kasumi_lkm_dir(&mut config);
-        let content = toml::to_string_pretty(&config).context("failed to serialize config")?;
+        let content = toml::to_string_pretty(self).context("failed to serialize config")?;
 
         ensure_parent_dir(main_path)?;
         fs::write(main_path, content)
