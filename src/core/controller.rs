@@ -37,9 +37,8 @@ use crate::{
         },
         recovery::{FailureStage, ModuleStageFailure},
         runtime_finalization,
-        storage::{StorageHandle, StorageMode},
+        storage::StorageHandle,
     },
-    sys::nuke,
 };
 
 pub struct Init;
@@ -241,8 +240,6 @@ impl MountController<Executed> {
             &self.state.result,
         )?;
 
-        nuke_before_cleanup(self.state.handle.mode(), self.state.handle.mount_point())?;
-
         clean_up(
             &self.tempdir,
             &self.config.kasumi.mirror_path,
@@ -254,21 +251,6 @@ impl MountController<Executed> {
 
         Ok(())
     }
-}
-
-fn nuke_before_cleanup(storage_mode: StorageMode, mount_point: &Path) -> Result<()> {
-    if storage_mode != StorageMode::Ext4 {
-        return Ok(());
-    }
-
-    crate::scoped_log!(
-        info,
-        "controller:finalize",
-        "cleanup nuke: mode={}, path={}",
-        storage_mode.as_str(),
-        mount_point.display()
-    );
-    nuke::nuke_path(mount_point)
 }
 
 fn clean_up(

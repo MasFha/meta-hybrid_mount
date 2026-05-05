@@ -37,13 +37,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Checkout KPM Sources
-        uses: actions/checkout@v6
-        with:
-          repository: Hybrid-Mount/nuke-kpm
-          path: nuke-kpm
-          fetch-depth: 1
-
       - name: Download Kasumi LKM artifacts
         uses: actions/download-artifact@v8
         with:
@@ -98,16 +91,10 @@ jobs:
           sudo apt install -y gcc-multilib
           cargo install cargo-ndk --locked
 
-      - name: Prepare APatch KPM Sources
-        run: |
-          git clone --depth 1 https://github.com/AndroidPatch/kpm.git /tmp/apatch-kpm
-
       - name: Build Release Package
         env:
           HYBRID_MOUNT_SIGN_KEY: ${{ secrets.SIGNING_KEY }}
           HYBRID_MOUNT_SIGN_CERT: ${{ secrets.SIGNING_CERT }}
-          HYBRID_MOUNT_KPM_DIR: ${{ github.workspace }}/nuke-kpm
-          HYBRID_MOUNT_KP_DIR: /tmp/apatch-kpm
           HYBRID_MOUNT_KASUMI_LKM_DIR: ${{ github.workspace }}/kasumi_lkm_artifacts
           HYBRID_MOUNT_NOTIFY: "1"
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}

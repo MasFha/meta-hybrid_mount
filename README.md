@@ -253,8 +253,6 @@ Prerequisites:
 
 - Rust toolchain from `rust-toolchain.toml`
 - Android NDK (recommended r27+)
-- `Hybrid-Mount/nuke-kpm` checkout for the GPL-2.0-only APatch KPM module source (`HYBRID_MOUNT_KPM_DIR`, or clone into `./nuke-kpm`)
-- `AndroidPatch/kpm` checkout for APatch KPM builds (`HYBRID_MOUNT_KP_DIR` or `KP_DIR`)
 - Node.js 20+ (only when building WebUI assets)
 
 Build commands:
@@ -273,21 +271,14 @@ cargo run -p xtask -- build --release --skip-webui
 ./scripts/build-local.sh --release --kasumi-lkm-dir /path/to/kasumi-lkm
 ```
 
-For APatch-ready release packages, export `HYBRID_MOUNT_KPM_DIR` to point at the `Hybrid-Mount/nuke-kpm` checkout, plus `HYBRID_MOUNT_KP_DIR` (or `KP_DIR`) and an Android NDK path before invoking `xtask`. Set `HYBRID_MOUNT_BUILD_KPM=1` if you want to force a KPM rebuild instead of reusing an existing artifact.
-
-If KPM build prerequisites are available, `xtask` also builds `nuke_ext4_sysfs.kpm` from the external KPM source repo and stages it into the module zip. Release builds require that artifact; debug builds will warn and continue when KPM prerequisites are missing.
-
 Artifacts are produced under `output/`.
 
 ## Operational Notes
 
 - Fresh installs now rely on mount-source auto-detection unless `mountsource` is explicitly set in `config.toml`.
-- On APatch, Hybrid Mount preloads `/data/adb/hybrid-mount/kpm/nuke_ext4_sysfs.kpm` through `/data/adb/ap/bin/kptools kpm load` during early startup, then issues `kpm control/call` only when `ext4_unregister_sysfs` is needed before falling back to `MNT_DETACH`.
-- APatch runtime overrides are available through `HYBRID_MOUNT_APATCH_KP_BIN`, `HYBRID_MOUNT_APATCH_KPM_MODULE`, `HYBRID_MOUNT_APATCH_KPM_ID`, `HYBRID_MOUNT_APATCH_KPM_CALL_MODE`, `HYBRID_MOUNT_APATCH_KPM_CONTROL`, and `HYBRID_MOUNT_APATCH_KPM_UNUSED_NR`.
 - If a bad config causes boot issues, regenerate a minimal config with `gen-config` and reapply module rules incrementally.
 - For binary size optimization, prefer dependency feature trimming and release profile tuning before invasive refactors.
 
 ## License
 
 Licensed under [Apache-2.0](LICENSE).
-Optional external build inputs referenced above, such as APatch KPM sources, remain under their respective upstream licenses.

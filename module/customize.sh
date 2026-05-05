@@ -43,16 +43,6 @@ rm -rf "$MODPATH/system"
 BASE_DIR="/data/adb/hybrid-mount"
 mkdir -p "$BASE_DIR"
 
-if [ -n "$APATCH" ] && [ -d "$MODPATH/kpm" ] && ls "$MODPATH"/kpm/*.kpm >/dev/null 2>&1; then
-  ui_print "- Installing APatch KPM assets..."
-  mkdir -p "$BASE_DIR/kpm"
-  rm -f "$BASE_DIR"/kpm/*.kpm
-  cp -f "$MODPATH"/kpm/*.kpm "$BASE_DIR/kpm/"
-  set_perm_recursive "$BASE_DIR/kpm" 0 0 0755 0644
-elif [ -z "$APATCH" ] && [ -d "$MODPATH/kpm" ] && ls "$MODPATH"/kpm/*.kpm >/dev/null 2>&1; then
-  ui_print "- APatch not detected, skipping KPM asset extraction"
-fi
-
 wait_volume_key_or_timeout() {
   local timeout_seconds=$1
   local start_time=$(date +%s)

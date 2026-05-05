@@ -22,11 +22,16 @@ use std::{
 };
 
 use anyhow::{Context, Result, bail, ensure};
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use rustix::mount::{UnmountFlags, unmount as umount};
 
 use crate::{
     core::storage::backends::Ext4Backend,
     mount::overlayfs::utils as overlay_utils,
-    sys::fs::{ensure_dir_exists, lsetfilecon},
+    sys::{
+        fs::{ensure_dir_exists, lsetfilecon},
+        nuke,
+    },
 };
 
 const EXT4_MIN_IMAGE_SIZE_BYTES: u64 = 64 * 1024 * 1024;
@@ -62,6 +67,7 @@ pub(super) fn setup_ext4_image(
     ensure_dir_exists(target)?;
 
     mount_ext4_with_repair(img_path, target)?;
+    reset_mount_state(target)?;
 
     Ok(Ext4Backend::new(target))
 }
@@ -176,5 +182,22 @@ fn mount_ext4_with_repair(img_path: &Path, target: &Path) -> Result<()> {
             bail!("Failed to repair modules.img");
         }
     }
+    Ok(())
+}
+
+fn reset_mount_state(target: &Path) -> Result<()> {
+    if crate::utils::KSU.load(std::sync::atomic::Ordering::Relaxed) {
+        nuke::nuke_path(target);
+        return Ok(());
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        umount(target, UnmountFlags::DETACH)?;
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    let _ = target;
+
     Ok(())
 }

@@ -253,8 +253,6 @@ hybrid-mount [OPTIONS] [COMMAND]
 
 - 使用 `rust-toolchain.toml` 指定的 Rust 工具链
 - Android NDK（建议 r27+）
-- GPL-2.0-only 的 APatch KPM 模块源码仓库 `Hybrid-Mount/nuke-kpm`（通过 `HYBRID_MOUNT_KPM_DIR` 指定，或直接检出到 `./nuke-kpm`）
-- 用于构建 APatch KPM 的 `AndroidPatch/kpm` 工作树（通过 `HYBRID_MOUNT_KP_DIR` 或 `KP_DIR` 指定）
 - Node.js 20+（仅构建 WebUI 时需要）
 
 命令示例：
@@ -273,21 +271,14 @@ cargo run -p xtask -- build --release --skip-webui
 ./scripts/build-local.sh --release --kasumi-lkm-dir /path/to/kasumi-lkm
 ```
 
-如果要产出可直接给 APatch 使用的发布包，请在执行 `xtask` 前先用 `HYBRID_MOUNT_KPM_DIR` 指向 `Hybrid-Mount/nuke-kpm` 检出目录，再导出 `HYBRID_MOUNT_KP_DIR`（或 `KP_DIR`）以及 Android NDK 路径。若希望强制重编 KPM，而不是复用已有产物，可再设置 `HYBRID_MOUNT_BUILD_KPM=1`。
-
-当 KPM 构建条件满足时，`xtask` 会从外部 KPM 源码仓库构建 `nuke_ext4_sysfs.kpm` 并打进模块包。`release` 构建要求该产物存在；`debug` 构建在缺少 KPM 条件时会给出警告并继续。
-
 产物输出到 `output/`。
 
 ## 运维建议
 
 - 新安装默认依赖自动检测 `mountsource`，只有在 `config.toml` 中显式指定时才会覆盖。
-- 在 APatch 环境下，Hybrid Mount 会在启动早期通过 `/data/adb/ap/bin/kptools kpm load` 预加载 `/data/adb/hybrid-mount/kpm/nuke_ext4_sysfs.kpm`，真正需要执行 `ext4_unregister_sysfs` 时再调用 `kpm control/call`，失败时再回退到 `MNT_DETACH`。
-- APatch 相关运行时覆盖变量包括 `HYBRID_MOUNT_APATCH_KP_BIN`、`HYBRID_MOUNT_APATCH_KPM_MODULE`、`HYBRID_MOUNT_APATCH_KPM_ID`、`HYBRID_MOUNT_APATCH_KPM_CALL_MODE`、`HYBRID_MOUNT_APATCH_KPM_CONTROL`、`HYBRID_MOUNT_APATCH_KPM_UNUSED_NR`。
 - 如果配置导致启动异常，先 `gen-config` 生成最小配置，再逐步恢复规则。
 - 缩小体积建议优先从依赖特性裁剪与 release profile 入手，再考虑重构。
 
 ## 开源协议
 
 本仓库采用 [Apache-2.0](LICENSE)。
-上文提到的可选外部构建输入，例如 APatch KPM 源码，仍分别遵循其上游许可证。

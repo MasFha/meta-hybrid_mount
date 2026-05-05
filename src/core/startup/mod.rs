@@ -30,15 +30,6 @@ pub fn run(cli: &Cli) -> Result<()> {
 
     utils::check_ksu();
 
-    if let Err(err) = sys::nuke::preload_if_needed() {
-        crate::scoped_log!(
-            warn,
-            "startup",
-            "apatch nuke kpm preload failed: error={:#}",
-            err
-        );
-    }
-
     let config = loader::load_startup_config(cli)?;
 
     if let Ok(version) = std::fs::read_to_string("/proc/sys/kernel/osrelease") {
