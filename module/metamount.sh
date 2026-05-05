@@ -13,6 +13,13 @@
 # limitations under the License.
 
 MODDIR="${0%/*}"
+BASE_DIR="/data/adb/hybrid-mount"
+RUN_DIR="$BASE_DIR/run"
+PID_FILE="$RUN_DIR/daemon.pid"
+SOCKET_FILE="$RUN_DIR/daemon.sock"
+
+mkdir -p "$BASE_DIR" "$RUN_DIR"
+
 BINARY="$MODDIR/hybrid-mount"
 
 if [ ! -f "$BINARY" ]; then
@@ -20,4 +27,36 @@ if [ ! -f "$BINARY" ]; then
   exit 1
 fi
 
-exec "$BINARY" daemon launch
+cleanup_runtime_files() {
+  rm -f "$PID_FILE" "$SOCKET_FILE"
+}
+
+chmod 755 "$BINARY"
+cleanup_runtime_files
+nohup "$BINARY" >/dev/null 2>&1 &
+DAEMON_PID=$!
+echo "$DAEMON_PID" > "$PID_FILE"
+
+WAIT_COUNT=0
+while [ "$WAIT_COUNT" -lt 50 ]; do
+  if [ -S "$SOCKET_FILE" ]; then
+    if [ -x /data/adb/ksud ]; then
+      /data/adb/ksud kernel notify-module-mounted
+    fi
+    exit 0
+  fi
+  if ! kill -0 "$DAEMON_PID" 2>/dev/null; then
+    wait "$DAEMON_PID"
+    exit $?
+  fi
+  WAIT_COUNT=$((WAIT_COUNT + 1))
+  sleep 0.1
+done
+
+if kill -0 "$DAEMON_PID" 2>/dev/null; then
+  echo "ERROR: daemon did not create socket in time"
+  exit 1
+fi
+
+wait "$DAEMON_PID"
+exit $?

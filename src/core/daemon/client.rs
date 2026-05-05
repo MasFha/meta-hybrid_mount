@@ -33,11 +33,6 @@ pub fn dispatch(cli: &Cli, command: DaemonCommand) -> Result<()> {
     Ok(())
 }
 
-pub fn ping(cli: &Cli) -> Result<()> {
-    let response = send_request(cli, DaemonCommand::Ping)?;
-    ensure_ok(&response, "daemon ping")
-}
-
 fn ensure_ok(response: &DaemonResponse, context: &str) -> Result<()> {
     if !response.ok {
         if let Some(error) = &response.error {

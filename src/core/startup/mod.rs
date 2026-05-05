@@ -71,6 +71,6 @@ pub fn run(cli: &Cli) -> Result<()> {
         crate::scoped_log!(warn, "startup", "config: disable_umount=true");
     }
 
-    recovery::run(config)?;
-    daemon::launch(cli)
+    let config = recovery::run(config)?;
+    daemon::serve(config)
 }

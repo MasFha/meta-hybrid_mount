@@ -13,9 +13,8 @@
 // limitations under the License.
 
 mod client;
-mod launcher;
 pub(crate) mod protocol;
 mod server;
 
 pub(crate) use self::protocol::DaemonCommand;
-pub use self::{client::dispatch, launcher::launch, server::serve};
+pub use self::{client::dispatch, server::serve};
