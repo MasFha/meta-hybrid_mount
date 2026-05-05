@@ -1,6 +1,6 @@
 import { For, Show, createMemo, createSignal, onMount } from "solid-js";
 import { createStore } from "solid-js/store";
-import { API } from "../lib/api";
+import * as kasumiService from "../lib/api/services/kasumiService";
 import { ICONS } from "../lib/constants";
 import { uiStore } from "../lib/stores/uiStore";
 import { kasumiStore } from "../lib/stores/kasumiStore";
@@ -128,7 +128,7 @@ export default function KasumiTab() {
     if (!force && hasFreshUserHideRules()) return Promise.resolve();
 
     pendingUserHideRulesLoad = (async () => {
-      const nextUserHideRules = await API.getUserHideRules();
+      const nextUserHideRules = await kasumiService.getUserHideRules();
       setUserHideRules(nextUserHideRules);
       hasLoadedUserHideRules = true;
       userHideRulesLoadedAt = Date.now();
@@ -193,7 +193,7 @@ export default function KasumiTab() {
   async function fillOriginalKernelUname() {
     setPending(true);
     try {
-      const original = await API.getOriginalKernelUname();
+      const original = await kasumiService.getOriginalKernelUname();
       setForms("release", original.release || "");
       setForms("version", original.version || "");
       uiStore.showToast(
@@ -217,16 +217,19 @@ export default function KasumiTab() {
     const release = forms.release.trim();
     const version = forms.version.trim();
 
-    await API.setKasumiUnameMode(forms.unameMode);
-    await API.setKasumiUname({ release, version });
+    await kasumiService.setKasumiUnameMode(forms.unameMode);
+    await kasumiService.setKasumiUname({ release, version });
     if (release && version) {
-      await API.applyKasumiUname(forms.unameMode, { release, version });
+      await kasumiService.applyKasumiUname(forms.unameMode, {
+        release,
+        version,
+      });
     }
   }
 
   async function clearUname() {
-    await API.setKasumiUnameMode(forms.unameMode);
-    await API.clearKasumiUname();
+    await kasumiService.setKasumiUnameMode(forms.unameMode);
+    await kasumiService.clearKasumiUname();
   }
 
   onMount(() => {
@@ -377,7 +380,7 @@ export default function KasumiTab() {
               onClick={() => {
                 setShowUnloadLkmWarning(false);
                 void runAction(
-                  () => API.unloadKasumiLkm(),
+                  () => kasumiService.unloadKasumiLkm(),
                   uiStore.L.kasumi?.unloadLkm ?? "LKM unloaded",
                 );
               }}
@@ -482,7 +485,7 @@ export default function KasumiTab() {
                       disabled={pending()}
                       onClick={() =>
                         runAction(
-                          () => API.setKasumiLkmKmi(forms.kmi),
+                          () => kasumiService.setKasumiLkmKmi(forms.kmi),
                           uiStore.L.kasumi?.saveKmi ?? "KMI saved",
                         )
                       }
@@ -496,7 +499,9 @@ export default function KasumiTab() {
                       onClick={() =>
                         runAction(
                           () =>
-                            API.setKasumiLkmAutoload(!Boolean(lkm()?.autoload)),
+                            kasumiService.setKasumiLkmAutoload(
+                              !Boolean(lkm()?.autoload),
+                            ),
                           uiStore.L.kasumi?.autoloadUpdated ??
                             "Autoload updated",
                         )
@@ -514,7 +519,7 @@ export default function KasumiTab() {
                         lkm()?.loaded
                           ? setShowUnloadLkmWarning(true)
                           : runAction(
-                              () => API.loadKasumiLkm(),
+                              () => kasumiService.loadKasumiLkm(),
                               uiStore.L.kasumi?.loadLkm ?? "LKM loaded",
                             )
                       }
@@ -566,7 +571,7 @@ export default function KasumiTab() {
                       onClick={() =>
                         runAction(
                           () =>
-                            API.setKasumiStealth(
+                            kasumiService.setKasumiStealth(
                               !Boolean(config()?.enable_stealth),
                             ),
                           uiStore.L.kasumi?.stealthUpdated ?? "Stealth updated",
@@ -592,7 +597,7 @@ export default function KasumiTab() {
                       onClick={() =>
                         runAction(
                           () =>
-                            API.setKasumiHidexattr(
+                            kasumiService.setKasumiHidexattr(
                               !Boolean(config()?.enable_hidexattr),
                             ),
                           uiStore.L.kasumi?.hidexattrUpdated ??
@@ -619,7 +624,7 @@ export default function KasumiTab() {
                       onClick={() =>
                         runAction(
                           () =>
-                            API.setKasumiDebug(
+                            kasumiService.setKasumiDebug(
                               !Boolean(config()?.enable_kernel_debug),
                             ),
                           uiStore.L.kasumi?.kernelDebugUpdated ??
@@ -700,7 +705,9 @@ export default function KasumiTab() {
                               "No spoofed uname configured.")}
                         </div>
                       </div>
-                      <div class={`state-pill ${forms.unameMode === "global" ? "active" : ""}`}>
+                      <div
+                        class={`state-pill ${forms.unameMode === "global" ? "active" : ""}`}
+                      >
                         {forms.unameMode === "global"
                           ? (uiStore.L.kasumi?.unameModeGlobal ?? "Global")
                           : (uiStore.L.kasumi?.unameModeScoped ?? "Scoped")}
@@ -761,7 +768,9 @@ export default function KasumiTab() {
                           {uiStore.L.kasumi?.unameModeGlobal ?? "Global"}
                         </button>
                       </div>
-                      <div class="uname-mode-desc">{unameModeDescription()}</div>
+                      <div class="uname-mode-desc">
+                        {unameModeDescription()}
+                      </div>
                     </div>
 
                     <div class="button-row">
@@ -803,7 +812,7 @@ export default function KasumiTab() {
                           disabled={pending()}
                           onClick={() =>
                             runAction(
-                              () => API.restoreKasumiUnameGlobal(),
+                              () => kasumiService.restoreKasumiUnameGlobal(),
                               uiStore.L.kasumi?.restoreUnameGlobal ??
                                 "Original uname restored",
                             )
@@ -833,7 +842,7 @@ export default function KasumiTab() {
                       disabled={pending()}
                       onClick={() =>
                         runAction(
-                          () => API.setKasumiCmdline(forms.cmdline),
+                          () => kasumiService.setKasumiCmdline(forms.cmdline),
                           uiStore.L.common?.saved ?? "Saved",
                         )
                       }
@@ -844,7 +853,7 @@ export default function KasumiTab() {
                       disabled={pending()}
                       onClick={() =>
                         runAction(
-                          () => API.clearKasumiCmdline(),
+                          () => kasumiService.clearKasumiCmdline(),
                           uiStore.L.kasumi?.clearCmdline ?? "Cmdline cleared",
                         )
                       }
@@ -914,7 +923,7 @@ export default function KasumiTab() {
                                   "Hide path cannot be empty",
                               );
                             }
-                            return API.addUserHideRule(path);
+                            return kasumiService.addUserHideRule(path);
                           },
                           uiStore.L.kasumi?.hideRuleAdded ?? "Hide rule added",
                           "full",
@@ -927,7 +936,7 @@ export default function KasumiTab() {
                       disabled={pending()}
                       onClick={() =>
                         runAction(
-                          () => API.applyUserHideRules(),
+                          () => kasumiService.applyUserHideRules(),
                           uiStore.L.kasumi?.hideRulesApplied ??
                             "User hide rules applied",
                           "full",
@@ -948,7 +957,7 @@ export default function KasumiTab() {
                             disabled={pending()}
                             onClick={() =>
                               runAction(
-                                () => API.removeUserHideRule(path),
+                                () => kasumiService.removeUserHideRule(path),
                                 uiStore.L.kasumi?.hideRuleRemoved ??
                                   "Hide rule removed",
                                 "full",
@@ -1096,7 +1105,7 @@ export default function KasumiTab() {
                                   "Spoofed path cannot be empty",
                               );
                             }
-                            return API.addKasumiMapsRule({
+                            return kasumiService.addKasumiMapsRule({
                               target_ino: parseUnsignedInput(
                                 forms.mapsTargetIno,
                                 "target inode",
@@ -1124,7 +1133,7 @@ export default function KasumiTab() {
                         disabled={pending()}
                         onClick={() =>
                           runAction(
-                            () => API.clearKasumiMapsRules(),
+                            () => kasumiService.clearKasumiMapsRules(),
                             uiStore.L.kasumi?.mapsCleared ??
                               "Maps rules cleared",
                           )
@@ -1280,7 +1289,7 @@ export default function KasumiTab() {
           disabled={pending()}
           onClick={() =>
             runAction(
-              () => API.clearKasumiRules(),
+              () => kasumiService.clearKasumiRules(),
               uiStore.L.kasumi?.clearRules ?? "Rules cleared",
             )
           }

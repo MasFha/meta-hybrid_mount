@@ -6,7 +6,7 @@ import { kasumiStore } from "../lib/stores/kasumiStore";
 import { ICONS } from "../lib/constants";
 import Skeleton from "../components/Skeleton";
 import BottomActions from "../components/BottomActions";
-import { API } from "../lib/api";
+import { reboot } from "../lib/api/services/systemService";
 import "./StatusTab.css";
 
 import "@material/web/iconbutton/filled-tonal-icon-button.js";
@@ -81,7 +81,7 @@ export default function StatusTab() {
               onClick={async () => {
                 setShowRebootConfirm(false);
                 try {
-                  await API.reboot();
+                  await reboot();
                 } catch (error) {
                   uiStore.showToast(
                     error instanceof Error
@@ -219,83 +219,72 @@ export default function StatusTab() {
           <div class="card-title">
             {uiStore.L?.status?.sysInfoTitle ?? "System Info"}
           </div>
-
-          <div class="info-row">
-            <span class="info-key">
-              {uiStore.L?.status?.kernel ?? "Kernel"}
-            </span>
-            <Show
-              when={!sysStore.loading}
-              fallback={<Skeleton variant="info-wide" />}
-            >
-              <span class="info-val">{sysStore.systemInfo?.kernel || "-"}</span>
-            </Show>
-          </div>
-
-          <div class="info-row">
-            <span class="info-key">
-              {uiStore.L?.status?.selinux ?? "SELinux"}
-            </span>
-            <Show
-              when={!sysStore.loading}
-              fallback={<Skeleton variant="info-narrow" />}
-            >
-              <span class="info-val">
-                {sysStore.systemInfo?.selinux || "-"}
-              </span>
-            </Show>
-          </div>
-
-          <div class="card-title card-title-spaced">
-            {uiStore.L?.status?.activePartitions ?? "Partitions"}
-          </div>
-
-          <div class="partition-list">
-            <Show
-              when={!sysStore.loading}
-              fallback={<Skeleton variant="chip-row" />}
-            >
+          <div class="chip-cluster">
+            <div class="info-chip full-width-chip">
+              <svg viewBox="0 0 24 24">
+                <path d={ICONS.anchor} />
+              </svg>
+              <span>{sysStore.systemInfo?.kernel || "-"}</span>
+            </div>
+            <div class="info-chip">
+              <svg viewBox="0 0 24 24">
+                <path d={ICONS.shield} />
+              </svg>
+              <span>{sysStore.systemInfo?.selinux || "-"}</span>
+            </div>
+            <Show when={displayPartitions().length > 0}>
               <For each={displayPartitions()}>
                 {(part) => (
-                  <div
-                    class={`partition-chip ${(sysStore.activePartitions || []).includes(part) ? "active" : ""}`}
-                  >
-                    {part}
+                  <div class="info-chip">
+                    <svg viewBox="0 0 24 24">
+                      <path d={ICONS.storage} />
+                    </svg>
+                    <span>{part}</span>
                   </div>
                 )}
               </For>
             </Show>
           </div>
         </div>
+
+        <Show
+          when={!kasumiStore.loading && kasumiStore.status?.config?.enabled}
+        >
+          <div class="info-card kasumi-card">
+            <div class="card-title">{uiStore.L?.kasumi?.title ?? "Kasumi"}</div>
+            <div class="meta-row">
+              <span>{uiStore.L?.common?.status ?? "Status"}</span>
+              <strong>
+                {kasumiStore.status?.available
+                  ? (uiStore.L?.kasumi?.statusWorking ?? "Working")
+                  : (uiStore.L?.kasumi?.statusUnavailable ?? "Unavailable")}
+              </strong>
+            </div>
+            <div class="meta-row">
+              <span>{uiStore.L?.kasumi?.lkmTitle ?? "LKM"}</span>
+              <strong>
+                {kasumiStore.status?.lkm?.loaded ? "Loaded" : "Not loaded"}
+              </strong>
+            </div>
+            <div class="meta-row">
+              <span>{uiStore.L?.kasumi?.rulesBadge ?? "Rules"}</span>
+              <strong>{kasumiStore.status?.rule_count ?? 0}</strong>
+            </div>
+          </div>
+        </Show>
       </div>
 
       <BottomActions>
-        <div class="spacer"></div>
-        <div class="action-row">
-          <md-filled-tonal-icon-button
-            class="reboot-btn"
-            onClick={() => setShowRebootConfirm(true)}
-            title="Reboot"
-          >
-            <md-icon>
-              <svg viewBox="0 0 24 24">
-                <path d={ICONS.power} />
-              </svg>
-            </md-icon>
-          </md-filled-tonal-icon-button>
-
-          <md-filled-tonal-icon-button
-            onClick={() => sysStore.loadStatus()}
-            disabled={sysStore.loading}
-            title={uiStore.L?.logs?.refresh}
-          >
-            <md-icon>
-              <svg viewBox="0 0 24 24">
-                <path d={ICONS.refresh} />
-              </svg>
-            </md-icon>
-          </md-filled-tonal-icon-button>
-        </div>
+        <md-filled-tonal-icon-button
+          onClick={() => setShowRebootConfirm(true)}
+          aria-label={uiStore.L?.common?.reboot ?? "Reboot"}
+        >
+          <md-icon>
+            <svg viewBox="0 0 24 24">
+              <path d={ICONS.power} />
+            </svg>
+          </md-icon>
+        </md-filled-tonal-icon-button>
       </BottomActions>
     </>
   );

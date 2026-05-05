@@ -1,6 +1,6 @@
 import { APP_VERSION } from "./constants_gen";
 import { DEFAULT_CONFIG } from "./constants";
-import type { AppAPI } from "./api";
+import type { AppAPI } from "./api/contracts";
 import type {
   AppConfig,
   Module,
@@ -422,10 +422,10 @@ export const MockAPI: AppAPI = {
     mockState.kasumi.kmiOverride = "";
   },
   async fixKasumiMounts(): Promise<void> {
-    await delay(220);
+    await delay(180);
   },
   async clearKasumiRules(): Promise<void> {
-    await delay(220);
+    await delay(180);
   },
   async releaseKasumiConnection(): Promise<void> {
     await delay(120);
@@ -434,11 +434,10 @@ export const MockAPI: AppAPI = {
     await delay(120);
   },
   async openLink(url: string): Promise<void> {
-    await delay(60);
+    await delay(100);
     window.open(url, "_blank", "noopener,noreferrer");
   },
   async reboot(): Promise<void> {
     await delay(120);
-    console.log("[Mock] Reboot requested");
   },
 };

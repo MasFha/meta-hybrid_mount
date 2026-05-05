@@ -94,7 +94,8 @@ export default function ModulesTab() {
         return false;
       }
       const matchSearch =
-        module.name.toLowerCase().includes(q) || module.id.toLowerCase().includes(q);
+        module.name.toLowerCase().includes(q) ||
+        module.id.toLowerCase().includes(q);
       if (!matchSearch) return false;
       if (
         filterType() !== "all" &&
@@ -125,7 +126,8 @@ export default function ModulesTab() {
   function getModeLabel(mod: Module) {
     const modes = uiStore.L.modules?.modes;
     if (!mod.is_mounted) return modes?.umount ?? "Umount";
-    if (normalizeModuleMode(mod.mode) === "magic") return modes?.magic ?? "Magic";
+    if (normalizeModuleMode(mod.mode) === "magic")
+      return modes?.magic ?? "Magic";
     if (normalizeModuleMode(mod.mode) === "kasumi") {
       return modes?.kasumi ?? "Kasumi";
     }
@@ -151,7 +153,10 @@ export default function ModulesTab() {
     modId: string,
     updateFn: (rules: Module["rules"]) => Module["rules"],
   ) {
-    updateModule(modId, (module) => ({ ...module, rules: updateFn(module.rules) }));
+    updateModule(modId, (module) => ({
+      ...module,
+      rules: updateFn(module.rules),
+    }));
   }
 
   return (
@@ -285,7 +290,9 @@ export default function ModulesTab() {
                               <div class="strategy-selector">
                                 <button
                                   class={`strategy-option ${effectiveDefaultMode() === "overlay" ? "selected" : ""}`}
-                                  onClick={() => updateDefaultMode(mod, "overlay")}
+                                  onClick={() =>
+                                    updateDefaultMode(mod, "overlay")
+                                  }
                                   type="button"
                                 >
                                   <span class="opt-title">
@@ -298,7 +305,9 @@ export default function ModulesTab() {
                                 </button>
                                 <button
                                   class={`strategy-option ${effectiveDefaultMode() === "magic" ? "selected" : ""}`}
-                                  onClick={() => updateDefaultMode(mod, "magic")}
+                                  onClick={() =>
+                                    updateDefaultMode(mod, "magic")
+                                  }
                                   type="button"
                                 >
                                   <span class="opt-title">
@@ -312,7 +321,9 @@ export default function ModulesTab() {
                                 <Show when={showKasumiStrategy()}>
                                   <button
                                     class={`strategy-option ${effectiveDefaultMode() === "kasumi" ? "selected" : ""}`}
-                                    onClick={() => updateDefaultMode(mod, "kasumi")}
+                                    onClick={() =>
+                                      updateDefaultMode(mod, "kasumi")
+                                    }
                                     disabled={!kasumiAvailable()}
                                     title={
                                       !kasumiAvailable()
@@ -338,7 +349,9 @@ export default function ModulesTab() {
                                 </Show>
                                 <button
                                   class={`strategy-option ${effectiveDefaultMode() === "ignore" ? "selected" : ""}`}
-                                  onClick={() => updateDefaultMode(mod, "ignore")}
+                                  onClick={() =>
+                                    updateDefaultMode(mod, "ignore")
+                                  }
                                   type="button"
                                 >
                                   <span class="opt-title">

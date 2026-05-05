@@ -5,7 +5,7 @@ import { sysStore } from "../lib/stores/sysStore";
 import { kasumiStore } from "../lib/stores/kasumiStore";
 import { moduleStore } from "../lib/stores/moduleStore";
 import { ICONS } from "../lib/constants";
-import { API } from "../lib/api";
+import { setKasumiEnabled } from "../lib/api/services/kasumiService";
 import { getCookie, setCookie } from "../lib/cookies";
 import ChipInput from "../components/ChipInput";
 import "./ConfigTab.css";
@@ -118,7 +118,7 @@ export default function ConfigTab() {
     setShowKasumiWarning(false);
     setKasumiPending(true);
     try {
-      await API.setKasumiEnabled(enabled);
+      await setKasumiEnabled(enabled);
       kasumiStore.setEnabledOptimistic(enabled);
       void kasumiStore.refreshStatus(false);
       if (enabled) {

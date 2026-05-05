@@ -1,9 +1,13 @@
 import { createSignal, createRoot } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
-import { API } from "../api";
 import { DEFAULT_CONFIG } from "../constants";
 import { uiStore } from "./uiStore";
 import type { AppConfig } from "../types";
+import {
+  loadConfigFromFile,
+  saveConfigToFile,
+  createDefaultConfig,
+} from "../api/repos/configRepo";
 
 interface SaveConfigOptions {
   showSuccess?: boolean;
@@ -44,7 +48,7 @@ const createConfigStore = () => {
     setLoading(true);
     pendingLoad = (async () => {
       try {
-        const data = await API.loadConfig();
+        const data = await loadConfigFromFile();
         setConfigStore(reconcile(normalizeConfig(data)));
         hasLoaded = true;
         return true;
@@ -81,7 +85,7 @@ const createConfigStore = () => {
 
     setSaving(true);
     try {
-      await API.saveConfig(normalizedConfig);
+      await saveConfigToFile(normalizedConfig);
       if (showSuccess) {
         uiStore.showToast(uiStore.L.common?.saved || "Saved", "success");
       }
@@ -102,7 +106,7 @@ const createConfigStore = () => {
   async function resetConfig() {
     setSaving(true);
     try {
-      await API.resetConfig();
+      await saveConfigToFile(await createDefaultConfig());
       invalidate();
       const loaded = await loadConfig(true);
       if (!loaded) {

@@ -1,8 +1,12 @@
 import { createSignal, createRoot } from "solid-js";
-import { API } from "../api";
 import { APP_VERSION } from "../constants_gen";
 import { uiStore } from "./uiStore";
 import type { StorageStatus, SystemInfo } from "../types";
+import {
+  getStorageUsage,
+  getSystemInfo,
+  getVersion,
+} from "../api/services/systemService";
 
 const createSysStore = () => {
   const [version, setVersion] = createSignal(APP_VERSION);
@@ -27,8 +31,8 @@ const createSysStore = () => {
     pendingLoad = (async () => {
       try {
         const [storageResult, systemInfoResult] = await Promise.allSettled([
-          API.getStorageUsage(),
-          API.getSystemInfo(),
+          getStorageUsage(),
+          getSystemInfo(),
         ]);
         let loadedAny = false;
         let failedAny = false;
@@ -78,7 +82,7 @@ const createSysStore = () => {
 
     pendingVersionLoad = (async () => {
       try {
-        setVersion(await API.getVersion());
+        setVersion(await getVersion());
         hasLoadedVersion = true;
       } catch (e) {
         console.error("Failed to load version", e);

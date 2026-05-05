@@ -1,7 +1,7 @@
 import { createSignal, Show, For, onMount } from "solid-js";
 import { uiStore } from "../lib/stores/uiStore";
 import { sysStore } from "../lib/stores/sysStore";
-import { API } from "../lib/api";
+import { openLink } from "../lib/api/services/systemService";
 import { ICONS } from "../lib/constants";
 import { IS_RELEASE } from "../lib/constants_gen";
 import { INFO_TAB_SECTIONS } from "../lib/infoTabData.gen";
@@ -37,12 +37,6 @@ export default function InfoTab() {
 
   function handleLink(e: MouseEvent, url: string) {
     e.preventDefault();
-    const openLink = API.openLink?.bind(API);
-
-    if (!openLink) {
-      window.open(url, "_blank", "noopener,noreferrer");
-      return;
-    }
 
     void openLink(url).catch(() => {
       window.open(url, "_blank", "noopener,noreferrer");
@@ -230,65 +224,54 @@ export default function InfoTab() {
         </div>
       </div>
 
-      <md-dialog ref={donateDialogRef} class="donate-dialog">
-        <div slot="headline">{uiStore.L.info?.supportUs ?? "Support Us"}</div>
-        <div slot="content" class="donate-content">
-          <div class="donate-section">
-            <div class="author-label">
-              {uiStore.L.info?.authorYuzaki ?? "YuzakiKokuban"}
-            </div>
-            <div class="donate-grid">
-              <md-filled-tonal-button
-                onClick={() => openQr("/assets/donate/yuzaki_alipay.jpg")}
+      <div class="dialog-container">
+        <md-dialog ref={donateDialogRef} class="transparent-scrim">
+          <div slot="headline">{uiStore.L.info.donate}</div>
+          <div slot="content" class="donate-dialog-content">
+            <div class="donate-list">
+              <button
+                class="donate-item"
+                onClick={() => openQr("/qr/alipay.png")}
               >
                 Alipay
-              </md-filled-tonal-button>
-              <md-filled-tonal-button
-                onClick={() => openQr("/assets/donate/yuzaki_wechat.jpg")}
+              </button>
+              <button
+                class="donate-item"
+                onClick={() => openQr("/qr/wechat.png")}
               >
-                WeChat
-              </md-filled-tonal-button>
-              <md-filled-tonal-button
-                onClick={() => openQr("/assets/donate/yuzaki_binance.jpg")}
-              >
-                Binance
-              </md-filled-tonal-button>
-              <md-filled-tonal-button
+                WeChat Pay
+              </button>
+              <button
+                class="donate-item"
                 onClick={(e: MouseEvent) => handleLink(e, PAYPAL_LINK)}
               >
-                <md-icon slot="icon">
-                  <svg viewBox="0 0 24 24">
-                    <path d={ICONS.donate} />
-                  </svg>
-                </md-icon>
                 PayPal
-              </md-filled-tonal-button>
+              </button>
             </div>
           </div>
-
-          <div class="donate-divider"></div>
-
-          <div class="donate-section">
-            <div class="author-label">Tools-cx-app</div>
-            <div class="donate-grid">
-              <md-filled-tonal-button
-                onClick={() => openQr("/assets/donate/tools_wechat.jpg")}
-              >
-                WeChat
-              </md-filled-tonal-button>
-            </div>
+          <div slot="actions">
+            <md-text-button onClick={closeDonate}>
+              {uiStore.L.common?.close ?? "Close"}
+            </md-text-button>
           </div>
-        </div>
-        <div slot="actions">
-          <md-text-button onClick={closeDonate}>Close</md-text-button>
-        </div>
-      </md-dialog>
+        </md-dialog>
+      </div>
 
-      <md-dialog ref={qrDialogRef} class="qr-dialog" onClick={closeQr}>
-        <div slot="content" class="qr-content-wrapper">
-          <img src={activeQr()} alt="Scan QR Code" />
-        </div>
-      </md-dialog>
+      <div class="dialog-container">
+        <md-dialog ref={qrDialogRef} class="transparent-scrim">
+          <div slot="headline">QR</div>
+          <div slot="content" class="qr-dialog-content">
+            <Show when={activeQr()}>
+              <img src={activeQr()} alt="QR" class="qr-image" />
+            </Show>
+          </div>
+          <div slot="actions">
+            <md-text-button onClick={closeQr}>
+              {uiStore.L.common?.close ?? "Close"}
+            </md-text-button>
+          </div>
+        </md-dialog>
+      </div>
     </div>
   );
 }

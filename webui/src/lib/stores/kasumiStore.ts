@@ -1,7 +1,7 @@
 import { createSignal, createRoot } from "solid-js";
 import type { KasumiStatus } from "../types";
-import { API } from "../api";
 import { uiStore } from "./uiStore";
+import { getKasumiStatus } from "../api/services/kasumiService";
 
 const STATUS_CACHE_TTL_MS = 3000;
 
@@ -23,7 +23,7 @@ const createKasumiStore = () => {
     setLoading(true);
     pendingLoad = (async () => {
       try {
-        const nextStatus = await API.getKasumiStatus();
+        const nextStatus = await getKasumiStatus();
         setStatus(nextStatus);
         hasLoaded = true;
         lastLoadedAt = Date.now();
