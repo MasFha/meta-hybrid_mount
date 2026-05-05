@@ -20,11 +20,12 @@ use crate::{
             ApiCommands, Cli, Commands, DaemonCommands, HideCommands, KasumiCommands,
             KasumiRuleCommands, LkmCommands,
         },
-        cli_handlers,
+        cli_handlers, loader,
     },
     core::{
         api,
-        daemon::{DaemonCommand, dispatch},
+        daemon::{self, DaemonCommand, dispatch},
+        startup,
     },
 };
 
@@ -56,10 +57,15 @@ pub fn run(cli: &Cli, command: &Commands) -> Result<()> {
             ApiCommands::Features => cli_handlers::handle_api_features(),
             ApiCommands::Hooks => dispatch(cli, DaemonCommand::ApiHooks),
         }),
-        Commands::Daemon { command } => run_api_command(|| match command {
-            DaemonCommands::Ping => dispatch(cli, DaemonCommand::Ping),
-            DaemonCommands::Status => dispatch(cli, DaemonCommand::Status),
-        }),
+        Commands::Daemon { command } => match command {
+            DaemonCommands::Launch => startup::run(cli),
+            DaemonCommands::Serve => {
+                let config = loader::load_config(cli)?;
+                daemon::serve(config)
+            }
+            DaemonCommands::Ping => run_api_command(|| dispatch(cli, DaemonCommand::Ping)),
+            DaemonCommands::Status => run_api_command(|| dispatch(cli, DaemonCommand::Status)),
+        },
         Commands::Lkm { command } => match command {
             LkmCommands::Load => dispatch(cli, DaemonCommand::LkmLoad),
             LkmCommands::Unload => dispatch(cli, DaemonCommand::LkmUnload),

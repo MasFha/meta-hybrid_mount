@@ -115,7 +115,7 @@ impl<'a> KasumiCoordinator<'a> {
             kasumi_modules.len()
         );
 
-        let mut kasumi_storage = storage::setup_with_sources(
+        let kasumi_storage = storage::setup_with_sources(
             &self.config.kasumi.mirror_path,
             &kasumi_sources,
             matches!(self.config.overlay_mode, OverlayMode::Ext4),
@@ -126,7 +126,6 @@ impl<'a> KasumiCoordinator<'a> {
 
         let kasumi_modules = kasumi_modules.into_iter().cloned().collect::<Vec<_>>();
         sync::perform_sync(&kasumi_modules, kasumi_storage.mount_point(), self.config)?;
-        kasumi_storage.commit(true)?;
 
         crate::scoped_log!(
             info,

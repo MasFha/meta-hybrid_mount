@@ -84,7 +84,3 @@ pub fn load_config(cli: &Cli) -> Result<Config> {
 
     load_default_config()
 }
-
-pub fn load_startup_config(cli: &Cli) -> Result<Config> {
-    load_config(cli)
-}

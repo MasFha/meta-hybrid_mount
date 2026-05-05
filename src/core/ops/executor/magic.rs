@@ -49,8 +49,7 @@ pub(super) fn mount_magic(
         .filter(|module| module_ids.contains(&module.id))
         .cloned()
         .collect();
-    let managed_partitions =
-        partitions::managed_partition_names(&config.moduledir, &config.partitions);
+    let managed_partitions = partitions::managed_partition_names(&config.partitions);
 
     let (mounted_ids, stats) = magic_mount::magic_mount(
         &magic_ws_path,

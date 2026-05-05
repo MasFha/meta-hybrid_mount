@@ -154,7 +154,7 @@ fn dispatch_command(
         }
         DaemonCommand::KasumiList => {
             let payload = if kasumi_mount::can_operate(config) {
-                api::parse_kasumi_rule_listing(&kasumi::get_active_rules()?)
+                api::parse_kasumi_rule_listing(&kasumi::list_rules()?)
             } else {
                 Vec::new()
             };

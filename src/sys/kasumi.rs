@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![allow(dead_code)]
-
 use std::{
     ffi::{CString, c_char, c_int, c_ulong, c_void},
     fs,
@@ -31,19 +29,26 @@ use std::{
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::{thread, time::Duration};
 
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Context, Result, bail};
 use rustix::{
     io::Errno,
     ioctl::{self, Ioctl, IoctlOutput, Opcode},
 };
 use walkdir::WalkDir;
 
-#[allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
+#[allow(
+    non_camel_case_types,
+    non_snake_case,
+    non_upper_case_globals,
+    dead_code
+)]
 mod uapi {
     include!(concat!(env!("OUT_DIR"), "/kasumi_uapi.rs"));
 }
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub const KSM_MAGIC1: c_int = uapi::KSM_MAGIC1 as c_int;
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub const KSM_MAGIC2: c_int = uapi::KSM_MAGIC2 as c_int;
 pub const KSM_PROTOCOL_VERSION: c_int = uapi::KSM_PROTOCOL_VERSION as c_int;
 
@@ -51,8 +56,11 @@ pub const KSM_MAX_LEN_PATHNAME: usize = uapi::KSM_MAX_LEN_PATHNAME as usize;
 pub const KSM_FAKE_CMDLINE_SIZE: usize = uapi::KSM_FAKE_CMDLINE_SIZE as usize;
 pub const KSM_UNAME_LEN: usize = uapi::KSM_UNAME_LEN as usize;
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub const KSM_SYSCALL_NR: libc::c_long = uapi::KSM_SYSCALL_NR as libc::c_long;
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub const KSM_CMD_GET_FD: c_int = uapi::KSM_CMD_GET_FD as c_int;
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub const KSM_PRCTL_GET_FD: c_int = uapi::KSM_PRCTL_GET_FD as c_int;
 
 pub const KSM_FEATURE_KSTAT_SPOOF: c_int = uapi::KSM_FEATURE_KSTAT_SPOOF as c_int;
@@ -142,10 +150,6 @@ impl uapi::kasumi_spoof_kstat {
             "Kasumi kstat target pathname",
         )
     }
-
-    pub fn target_pathname(&self) -> String {
-        read_c_buf(&self.target_pathname)
-    }
 }
 
 pub type KasumiSpoofUname = uapi::kasumi_spoof_uname;
@@ -165,13 +169,6 @@ impl Default for uapi::kasumi_spoof_uname {
 }
 
 impl uapi::kasumi_spoof_uname {
-    pub fn new(release: &str, version: &str) -> Result<Self> {
-        let mut value = Self::default();
-        value.set_release(release)?;
-        value.set_version(version)?;
-        Ok(value)
-    }
-
     pub fn set_sysname(&mut self, value: &str) -> Result<()> {
         write_str_into_c_buf(&mut self.sysname, value, "Kasumi uname sysname")
     }
@@ -195,14 +192,6 @@ impl uapi::kasumi_spoof_uname {
     pub fn set_domainname(&mut self, value: &str) -> Result<()> {
         write_str_into_c_buf(&mut self.domainname, value, "Kasumi uname domainname")
     }
-
-    pub fn release(&self) -> String {
-        read_c_buf(&self.release)
-    }
-
-    pub fn version(&self) -> String {
-        read_c_buf(&self.version)
-    }
 }
 
 pub type KasumiSpoofCmdline = uapi::kasumi_spoof_cmdline;
@@ -225,10 +214,6 @@ impl uapi::kasumi_spoof_cmdline {
 
     pub fn set_cmdline(&mut self, cmdline: &str) -> Result<()> {
         write_str_into_c_buf(&mut self.cmdline, cmdline, "Kasumi cmdline")
-    }
-
-    pub fn cmdline(&self) -> String {
-        read_c_buf(&self.cmdline)
     }
 }
 
@@ -273,10 +258,6 @@ impl uapi::kasumi_maps_rule {
             "Kasumi maps spoofed pathname",
         )
     }
-
-    pub fn spoofed_pathname(&self) -> String {
-        read_c_buf(&self.spoofed_pathname)
-    }
 }
 
 pub type KasumiMountHideArg = uapi::kasumi_mount_hide_arg;
@@ -309,10 +290,6 @@ impl uapi::kasumi_mount_hide_arg {
             path_pattern.as_ref(),
             "Kasumi mount_hide path_pattern",
         )
-    }
-
-    pub fn path_pattern(&self) -> String {
-        read_c_buf(&self.path_pattern)
     }
 }
 
@@ -375,14 +352,6 @@ impl uapi::kasumi_statfs_spoof_arg {
 
     pub fn set_spoof_f_type(&mut self, spoof_f_type: c_ulong) {
         self.spoof_f_type = spoof_f_type;
-    }
-
-    pub fn spoof_f_type(&self) -> c_ulong {
-        self.spoof_f_type
-    }
-
-    pub fn path(&self) -> String {
-        read_c_buf(&self.path)
     }
 }
 
@@ -510,38 +479,24 @@ pub fn status_name(status: KasumiStatus) -> &'static str {
     }
 }
 
+const FEATURE_NAMES: &[(c_int, &str)] = &[
+    (KSM_FEATURE_KSTAT_SPOOF, "kstat_spoof"),
+    (KSM_FEATURE_UNAME_SPOOF, "uname_spoof"),
+    (KSM_FEATURE_CMDLINE_SPOOF, "cmdline_spoof"),
+    (KSM_FEATURE_SELINUX_BYPASS, "selinux_bypass"),
+    (KSM_FEATURE_MERGE_DIR, "merge_dir"),
+    (KSM_FEATURE_MOUNT_HIDE, "mount_hide"),
+    (KSM_FEATURE_MAPS_SPOOF, "maps_spoof"),
+    (KSM_FEATURE_STATFS_SPOOF, "statfs_spoof"),
+    (KSM_FEATURE_FAKE_MOUNTINFO, "fake_mountinfo"),
+];
+
 pub fn feature_names(bits: c_int) -> Vec<String> {
-    let mut names = Vec::new();
-
-    if bits & KSM_FEATURE_KSTAT_SPOOF != 0 {
-        names.push("kstat_spoof".to_string());
-    }
-    if bits & KSM_FEATURE_UNAME_SPOOF != 0 {
-        names.push("uname_spoof".to_string());
-    }
-    if bits & KSM_FEATURE_CMDLINE_SPOOF != 0 {
-        names.push("cmdline_spoof".to_string());
-    }
-    if bits & KSM_FEATURE_SELINUX_BYPASS != 0 {
-        names.push("selinux_bypass".to_string());
-    }
-    if bits & KSM_FEATURE_MERGE_DIR != 0 {
-        names.push("merge_dir".to_string());
-    }
-    if bits & KSM_FEATURE_MOUNT_HIDE != 0 {
-        names.push("mount_hide".to_string());
-    }
-    if bits & KSM_FEATURE_MAPS_SPOOF != 0 {
-        names.push("maps_spoof".to_string());
-    }
-    if bits & KSM_FEATURE_STATFS_SPOOF != 0 {
-        names.push("statfs_spoof".to_string());
-    }
-    if bits & KSM_FEATURE_FAKE_MOUNTINFO != 0 {
-        names.push("fake_mountinfo".to_string());
-    }
-
-    names
+    FEATURE_NAMES
+        .iter()
+        .filter(|(bit, _)| bits & *bit != 0)
+        .map(|(_, name)| (*name).to_string())
+        .collect()
 }
 
 #[derive(Debug, Default)]
@@ -559,14 +514,9 @@ fn cstring_from_path(path: &Path) -> Result<CString> {
         .with_context(|| format!("path contains interior NUL byte: {}", path.display()))
 }
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn lock_error(name: &str) -> anyhow::Error {
     anyhow!("failed to lock Kasumi {name} mutex")
-}
-
-fn read_c_buf(buf: &[c_char]) -> String {
-    let len = buf.iter().position(|ch| *ch == 0).unwrap_or(buf.len());
-    let bytes: Vec<u8> = buf[..len].iter().map(|ch| *ch as u8).collect();
-    String::from_utf8_lossy(&bytes).into_owned()
 }
 
 fn write_bytes_into_c_buf(buf: &mut [c_char], bytes: &[u8], field_name: &str) -> Result<()> {
@@ -928,90 +878,63 @@ fn helper_rule_dtype(path: &Path) -> Result<Option<c_int>> {
 }
 
 pub fn list_rules() -> Result<String> {
-    list_rules_with_capacity(16 * 1024)
+    list_ioctl(KSM_IOC_LIST_RULES, 16 * 1024, "rule list")
 }
 
-pub fn get_active_rules() -> Result<String> {
-    list_rules()
-}
+fn for_each_helper_rule(
+    target_base: &Path,
+    module_dir: &Path,
+    mut handle: impl FnMut(&Path, &Path, Option<c_int>) -> Result<()>,
+) -> Result<()> {
+    if !module_dir.exists() || !module_dir.is_dir() {
+        bail!(
+            "Kasumi helper source is not a directory: {}",
+            module_dir.display()
+        );
+    }
 
-pub fn list_rules_with_capacity(capacity: usize) -> Result<String> {
-    list_ioctl(KSM_IOC_LIST_RULES, capacity, "rule list")
+    for entry_result in WalkDir::new(module_dir).follow_links(false) {
+        let entry = entry_result.with_context(|| {
+            format!(
+                "failed to walk Kasumi helper directory {}",
+                module_dir.display()
+            )
+        })?;
+
+        if entry.depth() == 0 || entry.file_type().is_dir() {
+            continue;
+        }
+
+        let path = entry.path();
+        let relative = path.strip_prefix(module_dir).with_context(|| {
+            format!(
+                "failed to compute relative path for Kasumi helper entry {}",
+                path.display()
+            )
+        })?;
+        let target_path = target_base.join(relative);
+
+        handle(&target_path, path, helper_rule_dtype(path)?)?;
+    }
+
+    Ok(())
 }
 
 pub fn add_rules_from_directory(target_base: &Path, module_dir: &Path) -> Result<()> {
-    if !module_dir.exists() || !module_dir.is_dir() {
-        bail!(
-            "Kasumi helper source is not a directory: {}",
-            module_dir.display()
-        );
-    }
-
-    for entry_result in WalkDir::new(module_dir).follow_links(false) {
-        let entry = entry_result.with_context(|| {
-            format!(
-                "failed to walk Kasumi helper directory {}",
-                module_dir.display()
-            )
-        })?;
-
-        if entry.depth() == 0 || entry.file_type().is_dir() {
-            continue;
-        }
-
-        let path = entry.path();
-        let relative = path.strip_prefix(module_dir).with_context(|| {
-            format!(
-                "failed to compute relative path for Kasumi helper entry {}",
-                path.display()
-            )
-        })?;
-        let target_path = target_base.join(relative);
-
-        match helper_rule_dtype(path)? {
-            Some(file_type) => add_rule(&target_path, path, file_type)?,
-            None => hide_path(&target_path)?,
-        }
-    }
-
-    Ok(())
+    for_each_helper_rule(
+        target_base,
+        module_dir,
+        |target_path, path, dtype| match dtype {
+            Some(file_type) => add_rule(target_path, path, file_type),
+            None => hide_path(target_path),
+        },
+    )
 }
 
 pub fn remove_rules_from_directory(target_base: &Path, module_dir: &Path) -> Result<()> {
-    if !module_dir.exists() || !module_dir.is_dir() {
-        bail!(
-            "Kasumi helper source is not a directory: {}",
-            module_dir.display()
-        );
-    }
-
-    for entry_result in WalkDir::new(module_dir).follow_links(false) {
-        let entry = entry_result.with_context(|| {
-            format!(
-                "failed to walk Kasumi helper directory {}",
-                module_dir.display()
-            )
-        })?;
-
-        if entry.depth() == 0 || entry.file_type().is_dir() {
-            continue;
-        }
-
-        let path = entry.path();
-        let relative = path.strip_prefix(module_dir).with_context(|| {
-            format!(
-                "failed to compute relative path for Kasumi helper entry {}",
-                path.display()
-            )
-        })?;
-        let target_path = target_base.join(relative);
-
-        match helper_rule_dtype(path)? {
-            Some(_) | None => delete_rule(&target_path)?,
-        }
-    }
-
-    Ok(())
+    for_each_helper_rule(target_base, module_dir, |target_path, _, _| {
+        delete_rule(target_path)
+    })
 }
 
 pub fn set_mirror_path(path: &Path) -> Result<()> {
@@ -1063,12 +986,7 @@ pub fn restore_uname_global() -> Result<()> {
 
 pub fn set_cmdline(cmdline: &KasumiSpoofCmdline) -> Result<()> {
     let mut cmdline = *cmdline;
-    let fd = unsafe { BorrowedFd::borrow_raw(fetch_anon_fd()?) };
-    let ioctl = KasumiIoctlArg::new(KSM_IOC_SET_CMDLINE, &mut cmdline);
-    if let Err(err) = unsafe { ioctl::ioctl(fd, ioctl) } {
-        let context = ioctl_error_context("set_cmdline", KSM_IOC_SET_CMDLINE, err);
-        return Err(anyhow::Error::new(err).context(context));
-    }
+    ioctl_with_arg("set_cmdline", KSM_IOC_SET_CMDLINE, &mut cmdline)?;
     ensure_kernel_err("Kasumi set_cmdline", cmdline.err)
 }
 
@@ -1099,11 +1017,7 @@ pub fn get_features() -> Result<c_int> {
 }
 
 pub fn get_hooks() -> Result<String> {
-    get_hooks_with_capacity(4 * 1024)
-}
-
-pub fn get_hooks_with_capacity(capacity: usize) -> Result<String> {
-    list_ioctl(KSM_IOC_GET_HOOKS, capacity, "hook list")
+    list_ioctl(KSM_IOC_GET_HOOKS, 4 * 1024, "hook list")
 }
 
 pub fn add_maps_rule(rule: &KasumiMapsRule) -> Result<()> {

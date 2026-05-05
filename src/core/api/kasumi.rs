@@ -190,7 +190,7 @@ pub fn build_kasumi_version_payload(config: &Config, state: &RuntimeState) -> Ka
 
     let status = kasumi::check_status();
     let kernel_version = kasumi::get_protocol_version().ok();
-    let active_rules = kasumi::get_active_rules().unwrap_or_default();
+    let active_rules = kasumi::list_rules().unwrap_or_default();
     let parsed_rules = parse_kasumi_rule_listing(&active_rules);
     let active_modules = if !state.kasumi_modules.is_empty() {
         let mut modules = state.kasumi_modules.clone();

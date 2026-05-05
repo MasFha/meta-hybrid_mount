@@ -26,7 +26,7 @@ use anyhow::{Context, Result, bail, ensure};
 use rustix::mount::{UnmountFlags, unmount as umount};
 
 use crate::{
-    core::storage::backends::Ext4Backend,
+    core::storage::{StorageHandle, StorageMode},
     mount::overlayfs::utils as overlay_utils,
     sys::{
         fs::{ensure_dir_exists, lsetfilecon},
@@ -46,7 +46,7 @@ pub(super) fn setup_ext4_image(
     target: &Path,
     img_path: &Path,
     source_paths: &[PathBuf],
-) -> Result<Ext4Backend> {
+) -> Result<StorageHandle> {
     crate::scoped_log!(trace, "storage:ext4", "backend select: mode=ext4");
     let total_size = calculate_total_size(source_paths)?;
     let min_size = EXT4_MIN_IMAGE_SIZE_BYTES;
@@ -69,7 +69,7 @@ pub(super) fn setup_ext4_image(
     mount_ext4_with_repair(img_path, target)?;
     reset_mount_state(target)?;
 
-    Ok(Ext4Backend::new(target))
+    Ok(StorageHandle::new(target, StorageMode::Ext4))
 }
 
 fn calculate_total_size(paths: &[PathBuf]) -> Result<u64> {

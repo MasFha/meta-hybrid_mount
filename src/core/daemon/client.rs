@@ -25,15 +25,25 @@ use crate::{conf::cli::Cli, defs};
 
 pub fn dispatch(cli: &Cli, command: DaemonCommand) -> Result<()> {
     let response = send_request(cli, command)?;
-    if !response.ok {
-        if let Some(error) = response.error {
-            bail!(error);
-        }
-        bail!("daemon request failed without error message");
-    }
+    ensure_ok(&response, "daemon request")?;
 
     if let Some(payload) = response.data {
         print_json(&payload).context("Failed to print daemon response")?;
+    }
+    Ok(())
+}
+
+pub fn ping(cli: &Cli) -> Result<()> {
+    let response = send_request(cli, DaemonCommand::Ping)?;
+    ensure_ok(&response, "daemon ping")
+}
+
+fn ensure_ok(response: &DaemonResponse, context: &str) -> Result<()> {
+    if !response.ok {
+        if let Some(error) = &response.error {
+            bail!(error.clone());
+        }
+        bail!("{context} failed without error message");
     }
     Ok(())
 }

@@ -19,7 +19,7 @@ use crate::{conf::config, partitions};
 pub(super) fn build_managed_partitions(
     config: &config::Config,
 ) -> std::collections::HashSet<String> {
-    partitions::managed_partition_set(&config.moduledir, &config.partitions)
+    partitions::managed_partition_set(&config.partitions)
 }
 
 pub(super) fn effective_stealth_enabled(config: &config::Config) -> bool {
@@ -65,10 +65,6 @@ pub(super) fn feature_supported(features: Option<i32>, required_feature: i32) ->
 pub(super) fn to_c_ulong(value: u64, field_name: &str) -> Result<libc::c_ulong> {
     libc::c_ulong::try_from(value)
         .map_err(|_| anyhow!("{field_name} value {value} does not fit into c_ulong"))
-}
-
-pub(super) fn to_c_uint(value: u32, _field_name: &str) -> libc::c_uint {
-    value
 }
 
 pub(super) fn to_c_long(value: i64, field_name: &str) -> Result<libc::c_long> {

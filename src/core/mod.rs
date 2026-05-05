@@ -13,7 +13,6 @@
 // limitations under the License.
 
 pub mod api;
-pub mod backend;
 pub mod backend_capabilities;
 pub mod cli_commands;
 pub mod controller;

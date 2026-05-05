@@ -175,7 +175,7 @@ fn detect_partitions(config: &Config) -> Result<Vec<PartitionInfo>> {
     let mount_entries = read_mount_entries()?;
     let mut partitions = Vec::new();
 
-    for name in partitions::managed_partition_names(&config.moduledir, &config.partitions) {
+    for name in partitions::managed_partition_names(&config.partitions) {
         let mount_point = PathBuf::from("/").join(&name);
         let metadata = match fs::symlink_metadata(&mount_point) {
             Ok(metadata) => metadata,

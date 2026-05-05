@@ -118,6 +118,8 @@ pub enum ApiCommands {
 
 #[derive(Subcommand, Debug)]
 pub enum DaemonCommands {
+    Launch,
+    Serve,
     Ping,
     Status,
 }

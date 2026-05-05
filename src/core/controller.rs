@@ -119,7 +119,7 @@ impl MountController<Init> {
 }
 
 impl MountController<StorageReady> {
-    pub fn scan_and_sync(mut self) -> Result<MountController<ModulesReady>> {
+    pub fn scan_and_sync(self) -> Result<MountController<ModulesReady>> {
         crate::scoped_log!(
             info,
             "controller:scan_and_sync",
@@ -137,10 +137,6 @@ impl MountController<StorageReady> {
 
         crate::scoped_log!(info, "controller:scan_and_sync", "sync start");
         sync::perform_sync(&modules, self.state.handle.mount_point(), &self.config)?;
-
-        self.state.handle.commit(self.config.disable_umount)?;
-
-        crate::scoped_log!(info, "controller:scan_and_sync", "commit complete");
 
         let kasumi = KasumiCoordinator::new(&self.config);
         kasumi

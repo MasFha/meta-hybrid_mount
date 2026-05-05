@@ -113,8 +113,7 @@ fn generate_with_root(
     let mut magic_ids = HashSet::new();
     let mut kasumi_ids = HashSet::new();
 
-    let managed_partitions =
-        partitions::managed_partition_set(&config.moduledir, &config.partitions);
+    let managed_partitions = partitions::managed_partition_set(&config.partitions);
     let kasumi = KasumiCoordinator::new(config);
     let kasumi_planning = kasumi.planning_state(capabilities, modules);
     let mut planner = PlannerContext::new(

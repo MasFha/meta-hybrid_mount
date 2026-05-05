@@ -14,9 +14,9 @@
 
 use std::{fs, path::Path};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 
-use crate::conf::{cli::Cli, loader, schema::Config};
+use crate::conf::schema::Config;
 
 fn ensure_parent_dir(path: &Path) -> Result<()> {
     if let Some(parent) = path.parent() {
@@ -25,13 +25,12 @@ fn ensure_parent_dir(path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn load_merged_config(main_path: &Path, allow_missing_main: bool) -> Result<Config> {
+fn load_merged_config(main_path: &Path) -> Result<Config> {
     crate::scoped_log!(
         debug,
         "conf:store:load_merged",
-        "start: path={}, allow_missing_main={}",
-        main_path.display(),
-        allow_missing_main
+        "start: path={}",
+        main_path.display()
     );
 
     let config = if main_path.exists() {
@@ -39,7 +38,7 @@ fn load_merged_config(main_path: &Path, allow_missing_main: bool) -> Result<Conf
             .with_context(|| format!("failed to read config file {}", main_path.display()))?;
         toml::from_str::<Config>(&content)
             .with_context(|| format!("failed to parse config file {}", main_path.display()))?
-    } else if allow_missing_main {
+    } else {
         crate::scoped_log!(
             debug,
             "conf:store:load_merged",
@@ -47,14 +46,6 @@ fn load_merged_config(main_path: &Path, allow_missing_main: bool) -> Result<Conf
             main_path.display()
         );
         Config::default()
-    } else {
-        crate::scoped_log!(
-            error,
-            "conf:store:load_merged",
-            "failed: reason=config_missing, path={}",
-            main_path.display()
-        );
-        bail!("config file not found: {}", main_path.display());
     };
 
     crate::scoped_log!(
@@ -69,7 +60,7 @@ fn load_merged_config(main_path: &Path, allow_missing_main: bool) -> Result<Conf
 
 impl Config {
     pub fn load_optional_from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
-        load_merged_config(path.as_ref(), true)
+        load_merged_config(path.as_ref())
     }
 
     pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
@@ -80,13 +71,5 @@ impl Config {
         fs::write(main_path, content)
             .with_context(|| format!("failed to write config file {}", main_path.display()))?;
         Ok(())
-    }
-}
-
-pub struct ConfigSession;
-
-impl ConfigSession {
-    pub fn load_persisted(cli: &Cli) -> Result<Config> {
-        loader::load_config(cli)
     }
 }

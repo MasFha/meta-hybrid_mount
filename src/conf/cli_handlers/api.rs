@@ -20,7 +20,7 @@ use crate::{
 };
 
 fn load_effective_config(cli: &Cli) -> Result<Config> {
-    crate::conf::store::ConfigSession::load_persisted(cli)
+    crate::conf::loader::load_config(cli)
 }
 
 fn print_json<T: serde::Serialize>(payload: &T, description: &str) -> Result<()> {

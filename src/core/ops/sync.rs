@@ -28,8 +28,7 @@ use crate::{
 
 pub fn perform_sync(modules: &[Module], target_base: &Path, config: &config::Config) -> Result<()> {
     crate::scoped_log!(info, "sync", "start: target={}", target_base.display());
-    let managed_partitions =
-        partitions::managed_partition_names(&config.moduledir, &config.partitions);
+    let managed_partitions = partitions::managed_partition_names(&config.partitions);
 
     prune_orphaned_modules(modules, target_base)?;
 

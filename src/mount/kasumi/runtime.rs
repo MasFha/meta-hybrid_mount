@@ -19,7 +19,7 @@ use anyhow::{Context, Result, bail};
 use super::{
     common::{
         effective_maps_spoof_enabled, effective_mount_hide_enabled, effective_statfs_spoof_enabled,
-        effective_stealth_enabled, feature_supported, has_uname_spoof_config, to_c_long, to_c_uint,
+        effective_stealth_enabled, feature_supported, has_uname_spoof_config, to_c_long,
         to_c_ulong,
     },
     compile::{CompiledRules, compile_rules, log_compiled_rule_summary},
@@ -263,7 +263,7 @@ pub fn apply_kstat_rule(rule: &schema::KasumiKstatRuleConfig) -> Result<()> {
     )?;
     native_rule.spoofed_ino = to_c_ulong(rule.spoofed_ino, "spoofed_ino")?;
     native_rule.spoofed_dev = to_c_ulong(rule.spoofed_dev, "spoofed_dev")?;
-    native_rule.spoofed_nlink = to_c_uint(rule.spoofed_nlink, "spoofed_nlink");
+    native_rule.spoofed_nlink = rule.spoofed_nlink;
     native_rule.spoofed_size = rule.spoofed_size;
     native_rule.spoofed_atime_sec = to_c_long(rule.spoofed_atime_sec, "spoofed_atime_sec")?;
     native_rule.spoofed_atime_nsec = to_c_long(rule.spoofed_atime_nsec, "spoofed_atime_nsec")?;

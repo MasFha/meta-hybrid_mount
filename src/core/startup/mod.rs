@@ -31,7 +31,7 @@ pub fn run(cli: &Cli) -> Result<()> {
 
     utils::check_ksu();
 
-    let config = loader::load_startup_config(cli)?;
+    let config = loader::load_config(cli)?;
 
     if let Ok(version) = std::fs::read_to_string("/proc/sys/kernel/osrelease") {
         crate::scoped_log!(debug, "startup", "kernel: version={}", version.trim());
@@ -71,6 +71,6 @@ pub fn run(cli: &Cli) -> Result<()> {
         crate::scoped_log!(warn, "startup", "config: disable_umount=true");
     }
 
-    let config = recovery::run(config)?;
-    daemon::serve(config)
+    recovery::run(config)?;
+    daemon::launch(cli)
 }
