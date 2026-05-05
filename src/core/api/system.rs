@@ -65,6 +65,16 @@ pub struct MountStatsPayload {
     pub success_rate: f64,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct SystemInfoPayload {
+    pub kernel: String,
+    pub selinux: String,
+    pub mount_base: String,
+    pub active_mounts: Vec<String>,
+    pub tmpfs_xattr_supported: bool,
+    pub supported_overlay_modes: Vec<String>,
+}
+
 impl From<&crate::core::runtime_state::MountStatistics> for MountStatsPayload {
     fn from(stats: &crate::core::runtime_state::MountStatistics) -> Self {
         Self {
@@ -152,6 +162,17 @@ pub fn build_partitions_payload(config: &Config) -> Vec<PartitionInfo> {
     detect_partitions(config).unwrap_or_default()
 }
 
+pub fn build_system_info_payload(state: &RuntimeState) -> SystemInfoPayload {
+    SystemInfoPayload {
+        kernel: read_kernel_release().unwrap_or_else(|_| "Unknown".to_string()),
+        selinux: read_selinux_status().unwrap_or_else(|_| "Unknown".to_string()),
+        mount_base: state.mount_point.display().to_string(),
+        active_mounts: state.active_mounts.clone(),
+        tmpfs_xattr_supported: state.tmpfs_xattr_supported,
+        supported_overlay_modes: vec!["tmpfs".to_string(), "ext4".to_string()],
+    }
+}
+
 fn statvfs_usage(path: &std::path::Path) -> Result<(u64, u64, u64, f64)> {
     let stats = statvfs(path).with_context(|| format!("statvfs failed for {}", path.display()))?;
     let block_size = if stats.f_frsize > 0 {
@@ -204,6 +225,37 @@ fn detect_partitions(config: &Config) -> Result<Vec<PartitionInfo>> {
     }
 
     Ok(partitions)
+}
+
+fn read_kernel_release() -> Result<String> {
+    let release = fs::read_to_string("/proc/sys/kernel/osrelease")
+        .context("failed to read /proc/sys/kernel/osrelease")?;
+    let trimmed = release.trim();
+    if !trimmed.is_empty() {
+        return Ok(trimmed.to_string());
+    }
+
+    let proc_version =
+        fs::read_to_string("/proc/version").context("failed to read /proc/version")?;
+    let trimmed = proc_version.trim();
+    if let Some(rest) = trimmed.strip_prefix("Linux version ")
+        && let Some(version) = rest.split_whitespace().next()
+    {
+        return Ok(version.to_string());
+    }
+    Ok("Unknown".to_string())
+}
+
+fn read_selinux_status() -> Result<String> {
+    if let Ok(enforce) = fs::read_to_string("/sys/fs/selinux/enforce") {
+        match enforce.trim() {
+            "1" => return Ok("Enforcing".to_string()),
+            "0" => return Ok("Permissive".to_string()),
+            _ => {}
+        }
+    }
+
+    Ok("Unknown".to_string())
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]

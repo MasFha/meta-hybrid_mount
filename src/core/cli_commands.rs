@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 
 use crate::{
     conf::{
@@ -52,7 +52,27 @@ pub fn run(cli: &Cli, command: &Commands) -> Result<()> {
             ApiCommands::Storage => dispatch(cli, DaemonCommand::ApiStorage),
             ApiCommands::MountStats => dispatch(cli, DaemonCommand::ApiMountStats),
             ApiCommands::MountTopology => dispatch(cli, DaemonCommand::ApiMountTopology),
-            ApiCommands::Partitions => cli_handlers::handle_api_partitions(cli),
+            ApiCommands::Partitions => dispatch(cli, DaemonCommand::ApiPartitions),
+            ApiCommands::SystemInfo => dispatch(cli, DaemonCommand::ApiSystemInfo),
+            ApiCommands::Version => dispatch(cli, DaemonCommand::ApiVersion),
+            ApiCommands::ConfigGet => dispatch(cli, DaemonCommand::ApiConfigGet),
+            ApiCommands::ConfigSet { config } => dispatch(
+                cli,
+                DaemonCommand::ApiConfigSet {
+                    config: serde_json::from_str(config)
+                        .context("Failed to parse config JSON payload")?,
+                },
+            ),
+            ApiCommands::ModulesList { path } => {
+                dispatch(cli, DaemonCommand::ApiModulesList { path: path.clone() })
+            }
+            ApiCommands::ModulesApply { modules } => dispatch(
+                cli,
+                DaemonCommand::ApiModulesApply {
+                    modules: serde_json::from_str(modules)
+                        .context("Failed to parse modules JSON payload")?,
+                },
+            ),
             ApiCommands::Lkm => dispatch(cli, DaemonCommand::ApiLkm),
             ApiCommands::Features => cli_handlers::handle_api_features(),
             ApiCommands::Hooks => dispatch(cli, DaemonCommand::ApiHooks),
@@ -87,6 +107,9 @@ pub fn run(cli: &Cli, command: &Commands) -> Result<()> {
             KasumiCommands::Version => dispatch(cli, DaemonCommand::KasumiVersion),
             KasumiCommands::Features => dispatch(cli, DaemonCommand::KasumiFeatures),
             KasumiCommands::Hooks => dispatch(cli, DaemonCommand::KasumiHooks),
+            KasumiCommands::ApplyConfigRuntime => {
+                dispatch(cli, DaemonCommand::KasumiApplyConfigRuntime)
+            }
             KasumiCommands::Clear => dispatch(cli, DaemonCommand::KasumiClear),
             KasumiCommands::ReleaseConnection => {
                 dispatch(cli, DaemonCommand::KasumiReleaseConnection)

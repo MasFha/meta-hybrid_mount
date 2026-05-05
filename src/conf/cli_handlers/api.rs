@@ -14,14 +14,7 @@
 
 use anyhow::{Context, Result};
 
-use crate::{
-    conf::{cli::Cli, config::Config},
-    core::api,
-};
-
-fn load_effective_config(cli: &Cli) -> Result<Config> {
-    crate::conf::loader::load_config(cli)
-}
+use crate::core::api;
 
 fn print_json<T: serde::Serialize>(payload: &T, description: &str) -> Result<()> {
     println!(
@@ -30,12 +23,6 @@ fn print_json<T: serde::Serialize>(payload: &T, description: &str) -> Result<()>
             .with_context(|| format!("Failed to serialize {description}"))?
     );
     Ok(())
-}
-
-pub fn handle_api_partitions(cli: &Cli) -> Result<()> {
-    let config = load_effective_config(cli)?;
-    let payload = api::build_partitions_payload(&config);
-    print_json(&payload, "partitions payload")
 }
 
 pub fn handle_api_features() -> Result<()> {

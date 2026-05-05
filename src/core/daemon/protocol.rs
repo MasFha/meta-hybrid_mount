@@ -31,6 +31,19 @@ pub enum DaemonCommand {
     ApiStorage,
     ApiMountStats,
     ApiMountTopology,
+    ApiPartitions,
+    ApiSystemInfo,
+    ApiVersion,
+    ApiConfigGet,
+    ApiConfigSet {
+        config: serde_json::Value,
+    },
+    ApiModulesList {
+        path: Option<PathBuf>,
+    },
+    ApiModulesApply {
+        modules: Vec<crate::core::api::ModuleApplyEntry>,
+    },
     ApiLkm,
     ApiHooks,
     KasumiStatus,
@@ -38,6 +51,7 @@ pub enum DaemonCommand {
     KasumiVersion,
     KasumiFeatures,
     KasumiHooks,
+    KasumiApplyConfigRuntime,
     HideList,
     HideAdd {
         path: PathBuf,

@@ -17,6 +17,7 @@ BASE_DIR="/data/adb/hybrid-mount"
 RUN_DIR="$BASE_DIR/run"
 PID_FILE="$RUN_DIR/daemon.pid"
 SOCKET_FILE="$RUN_DIR/daemon.sock"
+STATE_FILE="$RUN_DIR/daemon_state.json"
 
 mkdir -p "$BASE_DIR" "$RUN_DIR"
 
@@ -28,14 +29,13 @@ if [ ! -f "$BINARY" ]; then
 fi
 
 cleanup_runtime_files() {
-  rm -f "$PID_FILE" "$SOCKET_FILE"
+  rm -f "$PID_FILE" "$SOCKET_FILE" "$STATE_FILE"
 }
 
 chmod 755 "$BINARY"
 cleanup_runtime_files
-nohup "$BINARY" >/dev/null 2>&1 &
+nohup "$BINARY" daemon launch >/dev/null 2>&1 &
 DAEMON_PID=$!
-echo "$DAEMON_PID" > "$PID_FILE"
 
 WAIT_COUNT=0
 while [ "$WAIT_COUNT" -lt 50 ]; do

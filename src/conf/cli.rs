@@ -68,6 +68,8 @@ pub enum KasumiCommands {
     Version,
     Features,
     Hooks,
+    #[command(name = "apply-config-runtime")]
+    ApplyConfigRuntime,
     Clear,
     #[command(name = "release-connection")]
     ReleaseConnection,
@@ -111,6 +113,24 @@ pub enum ApiCommands {
     #[command(name = "mount-topology")]
     MountTopology,
     Partitions,
+    #[command(name = "system-info")]
+    SystemInfo,
+    Version,
+    #[command(name = "config-get")]
+    ConfigGet,
+    #[command(name = "config-set")]
+    ConfigSet {
+        config: String,
+    },
+    #[command(name = "modules-list")]
+    ModulesList {
+        #[arg(long)]
+        path: Option<PathBuf>,
+    },
+    #[command(name = "modules-apply")]
+    ModulesApply {
+        modules: String,
+    },
     Lkm,
     Features,
     Hooks,

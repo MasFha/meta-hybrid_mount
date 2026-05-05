@@ -41,8 +41,7 @@ export interface RuntimeKasumiPayload {
 import { PATHS } from "../../constants";
 import { AppError } from "../core/error";
 import { isRecord } from "../core/guards";
-import { runCommand, runHybridMountJson } from "../core/bridge";
-import { readOptionalTextFile } from "../core/fileRepo";
+import { runHybridMountJson } from "../core/bridge";
 
 export async function loadRuntimeState(): Promise<RuntimeStatePayload> {
   const direct = await runHybridMountJson("daemon status", PATHS.BINARY);
@@ -50,40 +49,4 @@ export async function loadRuntimeState(): Promise<RuntimeStatePayload> {
     throw new AppError("daemon status returned invalid payload");
   }
   return direct as RuntimeStatePayload;
-}
-
-export async function readKernelRelease(): Promise<string> {
-  const release = await readOptionalTextFile(
-    runCommand,
-    "/proc/sys/kernel/osrelease",
-  );
-  if (release?.trim()) {
-    return release.trim();
-  }
-
-  const procVersion = await readOptionalTextFile(runCommand, "/proc/version");
-  if (procVersion?.trim()) {
-    const match = procVersion.trim().match(/^Linux version\s+(\S+)/);
-    if (match?.[1]) {
-      return match[1];
-    }
-  }
-
-  return "Unknown";
-}
-
-export async function readSelinuxStatus(): Promise<string> {
-  const enforce = await readOptionalTextFile(
-    runCommand,
-    "/sys/fs/selinux/enforce",
-  );
-  if (enforce?.trim() === "1") return "Enforcing";
-  if (enforce?.trim() === "0") return "Permissive";
-
-  const result = await runCommand("getenforce 2>/dev/null");
-  if (result.errno === 0 && result.stdout.trim()) {
-    return result.stdout.trim();
-  }
-
-  return "Unknown";
 }

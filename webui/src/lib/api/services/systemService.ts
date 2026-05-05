@@ -3,26 +3,27 @@ import type { StorageStatus, SystemInfo } from "../../types";
 import {
   defaultVersion,
   hasExecBridge,
+  runHybridMountJson,
   runCommandExpectOk,
 } from "../core/bridge";
-import { isBoolean, isString, isStringArray } from "../core/guards";
+import { isBoolean, isRecord, isString, isStringArray } from "../core/guards";
 import { shellEscapeDoubleQuoted } from "../core/shell";
 import { buildModeStats, buildMountedCount } from "../codec/runtimeCodec";
-import { getModuleVersion } from "../repos/configRepo";
-import {
-  loadRuntimeState,
-  readKernelRelease,
-  readSelinuxStatus,
-} from "../repos/runtimeRepo";
+import { loadRuntimeState } from "../repos/runtimeRepo";
 
 export async function getStorageUsage(): Promise<StorageStatus> {
   try {
+    const payload = await runHybridMountJson("api storage", PATHS.BINARY);
+    if (!isRecord(payload)) {
+      throw new Error("storage payload is invalid");
+    }
     const state = await loadRuntimeState();
     const modeStats = buildModeStats(state);
     return {
-      type: isString(state.storage_mode)
-        ? (state.storage_mode as string as StorageStatus["type"])
+      type: isString(payload.mode)
+        ? (payload.mode as StorageStatus["type"])
         : "unknown",
+      error: isString(payload.error) ? payload.error : undefined,
       supported_modes: ["tmpfs", "ext4"],
       modeStats,
       mountedCount: buildMountedCount(state, modeStats),
@@ -38,21 +39,38 @@ export async function getStorageUsage(): Promise<StorageStatus> {
 }
 
 export async function getSystemInfo(): Promise<SystemInfo> {
-  const state = await loadRuntimeState();
+  const payload = await runHybridMountJson("api system-info", PATHS.BINARY);
+  if (!isRecord(payload)) {
+    throw new Error("system info payload is invalid");
+  }
   return {
-    kernel: await readKernelRelease(),
-    selinux: await readSelinuxStatus(),
-    mountBase: isString(state.mount_point) ? state.mount_point : "-",
-    activeMounts: isStringArray(state.active_mounts) ? state.active_mounts : [],
-    tmpfs_xattr_supported: isBoolean(state.tmpfs_xattr_supported)
-      ? state.tmpfs_xattr_supported
+    kernel: isString(payload.kernel) ? payload.kernel : "Unknown",
+    selinux: isString(payload.selinux) ? payload.selinux : "Unknown",
+    mountBase: isString(payload.mount_base) ? payload.mount_base : "-",
+    activeMounts: isStringArray(payload.active_mounts)
+      ? payload.active_mounts
+      : [],
+    tmpfs_xattr_supported: isBoolean(payload.tmpfs_xattr_supported)
+      ? payload.tmpfs_xattr_supported
       : undefined,
-    supported_overlay_modes: ["tmpfs", "ext4"],
+    supported_overlay_modes:
+      Array.isArray(payload.supported_overlay_modes) &&
+      payload.supported_overlay_modes.every(isString)
+        ? (payload.supported_overlay_modes as SystemInfo["supported_overlay_modes"])
+        : ["tmpfs", "ext4"],
   };
 }
 
 export async function getVersion(): Promise<string> {
-  return getModuleVersion(PATHS.BINARY, defaultVersion);
+  const payload = await runHybridMountJson("api version", PATHS.BINARY);
+  if (
+    isRecord(payload) &&
+    isString(payload.version) &&
+    payload.version.trim()
+  ) {
+    return payload.version;
+  }
+  return defaultVersion;
 }
 
 export async function reboot(): Promise<void> {

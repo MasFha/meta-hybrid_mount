@@ -13,6 +13,17 @@ describe("parseHybridMountJsonOutput", () => {
     });
   });
 
+  it("parses daemon config payloads", () => {
+    expect(
+      parseHybridMountJsonOutput(
+        '{"moduledir":"/data/adb/modules","partitions":[]}',
+      ),
+    ).toEqual({
+      moduledir: "/data/adb/modules",
+      partitions: [],
+    });
+  });
+
   it("throws structured CLI error payloads", () => {
     expect(() =>
       parseHybridMountJsonOutput(

@@ -417,6 +417,30 @@ pub fn reset_runtime(config: &config::Config) -> Result<bool> {
     Ok(true)
 }
 
+pub fn apply_runtime_config(config: &config::Config) -> Result<bool> {
+    if !can_operate(config) {
+        return Ok(false);
+    }
+
+    let runtime_requested = config.kasumi.enabled && auxiliary_features_requested(config);
+    let reset = reset_runtime(config)?;
+    let features = get_features();
+    log_feature_summary(features);
+
+    if !runtime_requested {
+        kasumi::set_enabled(false)?;
+        return Ok(reset);
+    }
+
+    apply_runtime_switches(config, true, features)?;
+    apply_spoof_settings(config, features)?;
+    kasumi::set_enabled(true)?;
+    if let Err(err) = kasumi::fix_mounts() {
+        crate::scoped_log!(debug, "mount:kasumi", "fix_mounts skipped: error={:#}", err);
+    }
+    Ok(true)
+}
+
 pub fn apply(plan: &mut MountPlan, modules: &[Module], config: &config::Config) -> Result<bool> {
     if !config.kasumi.enabled {
         return Ok(false);

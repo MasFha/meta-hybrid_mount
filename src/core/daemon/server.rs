@@ -14,18 +14,26 @@
 
 use std::{
     fs,
-    io::{BufRead, BufReader, Write},
+    io::{BufRead, BufReader, ErrorKind, Write},
     os::unix::{
         fs::{FileTypeExt, MetadataExt, PermissionsExt},
-        net::UnixListener,
+        net::{UnixListener, UnixStream},
     },
-    path::Path,
-    sync::{Arc, Mutex},
+    path::{Path, PathBuf},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::Duration,
 };
 
 use anyhow::{Context, Result, bail};
 use serde::Serialize;
 use serde_json::{Value, json};
+use signal_hook::{
+    consts::signal::{SIGHUP, SIGINT, SIGTERM},
+    flag,
+};
 
 use super::protocol::{DaemonCommand, DaemonRequest, DaemonResponse};
 use crate::{
@@ -36,12 +44,16 @@ use crate::{
     sys::{fs::atomic_write, kasumi, lkm},
 };
 
-pub fn serve(config: Config) -> Result<()> {
-    cleanup_stale_socket(Path::new(defs::SOCKET_FILE))?;
+pub fn serve(_config: Config) -> Result<()> {
+    cleanup_stale_runtime_files()?;
     let listener = UnixListener::bind(defs::SOCKET_FILE)
         .with_context(|| format!("Failed to bind daemon socket {}", defs::SOCKET_FILE))?;
     fs::set_permissions(defs::SOCKET_FILE, fs::Permissions::from_mode(0o600))
         .with_context(|| format!("Failed to set permissions on {}", defs::SOCKET_FILE))?;
+    listener
+        .set_nonblocking(true)
+        .with_context(|| format!("Failed to set {} nonblocking", defs::SOCKET_FILE))?;
+
     write_pid_file()?;
     let state = Arc::new(Mutex::new(RuntimeState::load().unwrap_or_default()));
     {
@@ -49,16 +61,22 @@ pub fn serve(config: Config) -> Result<()> {
         guard.set_daemon_state(true, defs::SOCKET_FILE);
         guard.save()?;
     }
+    let _guard = DaemonRuntimeGuard::new(state.clone());
+    let shutdown = install_shutdown_flag()?;
+
     crate::scoped_log!(info, "daemon", "listening: socket={}", defs::SOCKET_FILE);
 
-    for stream in listener.incoming() {
-        match stream {
-            Ok(mut stream) => {
-                if let Err(err) = handle_stream(&config, &state, &mut stream) {
+    while !shutdown.load(Ordering::Relaxed) {
+        match listener.accept() {
+            Ok((mut stream, _addr)) => {
+                if let Err(err) = handle_stream(&state, &mut stream) {
                     crate::scoped_log!(warn, "daemon", "request failed: error={:#}", err);
                     let payload = DaemonResponse::error(format!("{err:#}"));
                     let _ = write_response(&mut stream, &payload);
                 }
+            }
+            Err(err) if err.kind() == ErrorKind::WouldBlock => {
+                std::thread::sleep(Duration::from_millis(100));
             }
             Err(err) => {
                 crate::scoped_log!(warn, "daemon", "accept failed: error={:#}", err);
@@ -66,14 +84,16 @@ pub fn serve(config: Config) -> Result<()> {
         }
     }
 
+    crate::scoped_log!(
+        info,
+        "daemon",
+        "shutdown requested: socket={}",
+        defs::SOCKET_FILE
+    );
     Ok(())
 }
 
-fn handle_stream(
-    config: &Config,
-    state: &Arc<Mutex<RuntimeState>>,
-    stream: &mut std::os::unix::net::UnixStream,
-) -> Result<()> {
+fn handle_stream(state: &Arc<Mutex<RuntimeState>>, stream: &mut UnixStream) -> Result<()> {
     let mut reader = BufReader::new(
         stream
             .try_clone()
@@ -89,21 +109,22 @@ fn handle_stream(
 
     let request: DaemonRequest =
         serde_json::from_str(line.trim_end()).context("Failed to parse daemon request")?;
-    let effective_config = resolve_config(config, request.config_path.as_deref())?;
-    let payload = dispatch_command(&effective_config, state, request.command)?;
+    let config_path = request
+        .config_path
+        .unwrap_or_else(|| PathBuf::from(defs::CONFIG_FILE));
+    let effective_config = load_runtime_config(&config_path)?;
+    let payload = dispatch_command(&effective_config, &config_path, state, request.command)?;
     write_response(stream, &DaemonResponse::success(payload))
 }
 
-fn resolve_config(default_config: &Config, override_path: Option<&Path>) -> Result<Config> {
-    let Some(path) = override_path else {
-        return Ok(default_config.clone());
-    };
-    Config::load_optional_from_file(path)
-        .with_context(|| format!("Failed to load config from custom path: {}", path.display()))
+fn load_runtime_config(config_path: &Path) -> Result<Config> {
+    Config::load_optional_from_file(config_path)
+        .with_context(|| format!("Failed to load config from path: {}", config_path.display()))
 }
 
 fn dispatch_command(
     config: &Config,
+    config_path: &Path,
     state: &Arc<Mutex<RuntimeState>>,
     command: DaemonCommand,
 ) -> Result<Value> {
@@ -124,6 +145,30 @@ fn dispatch_command(
         DaemonCommand::ApiMountTopology => {
             let guard = state.lock().expect("daemon state poisoned");
             to_value(&api::build_mount_topology_payload(config, &guard))
+        }
+        DaemonCommand::ApiPartitions => to_value(&api::build_partitions_payload(config)),
+        DaemonCommand::ApiSystemInfo => {
+            let guard = state.lock().expect("daemon state poisoned");
+            to_value(&api::build_system_info_payload(&guard))
+        }
+        DaemonCommand::ApiVersion => to_value(&api::build_version_payload()),
+        DaemonCommand::ApiConfigGet => to_value(config),
+        DaemonCommand::ApiConfigSet { config: payload } => {
+            let config: Config =
+                serde_json::from_value(payload).context("Failed to decode config payload")?;
+            config.save_to_file(config_path)?;
+            to_value(&json!({ "saved": true }))
+        }
+        DaemonCommand::ApiModulesList { path } => {
+            let guard = state.lock().expect("daemon state poisoned");
+            to_value(&api::build_modules_payload(
+                config,
+                &guard,
+                path.as_deref(),
+            )?)
+        }
+        DaemonCommand::ApiModulesApply { modules } => {
+            to_value(&api::apply_modules_payload(config_path, &modules)?)
         }
         DaemonCommand::ApiLkm => to_value(&api::build_lkm_payload(config)),
         DaemonCommand::ApiHooks => {
@@ -166,6 +211,12 @@ fn dispatch_command(
         }
         DaemonCommand::KasumiFeatures => to_value(&api::build_features_payload()),
         DaemonCommand::KasumiHooks => to_value(&kasumi_mount::hook_lines()?),
+        DaemonCommand::KasumiApplyConfigRuntime => {
+            let applied = kasumi_mount::apply_runtime_config(config)?;
+            kasumi::invalidate_status_cache();
+            refresh_runtime_snapshot(config, state)?;
+            to_value(&json!({ "applied": applied }))
+        }
         DaemonCommand::HideList => to_value(&user_hide_rules::load_user_hide_rules()?),
         DaemonCommand::HideAdd { path } => {
             let added = user_hide_rules::add_user_hide_rule(&path)?;
@@ -318,10 +369,7 @@ fn dispatch_command(
     }
 }
 
-fn write_response(
-    stream: &mut std::os::unix::net::UnixStream,
-    response: &DaemonResponse,
-) -> Result<()> {
+fn write_response(stream: &mut UnixStream, response: &DaemonResponse) -> Result<()> {
     let serialized =
         serde_json::to_string(response).context("Failed to serialize daemon response")?;
     stream
@@ -333,11 +381,18 @@ fn write_response(
     stream.flush().context("Failed to flush daemon response")
 }
 
+fn cleanup_stale_runtime_files() -> Result<()> {
+    cleanup_stale_pid_file()?;
+    cleanup_stale_socket(Path::new(defs::SOCKET_FILE))?;
+    mark_state_stopped_if_offline()?;
+    Ok(())
+}
+
 fn cleanup_stale_socket(path: &Path) -> Result<()> {
     if !path.exists() {
         return Ok(());
     }
-    match std::os::unix::net::UnixStream::connect(path) {
+    match UnixStream::connect(path) {
         Ok(_) => bail!("daemon socket already active at {}", path.display()),
         Err(_) => {
             fs::remove_file(path)
@@ -345,6 +400,41 @@ fn cleanup_stale_socket(path: &Path) -> Result<()> {
             Ok(())
         }
     }
+}
+
+fn cleanup_stale_pid_file() -> Result<()> {
+    let Ok(raw) = fs::read_to_string(defs::PID_FILE) else {
+        return Ok(());
+    };
+    let pid = raw.trim().parse::<i32>().ok();
+    let Some(pid) = pid else {
+        fs::remove_file(defs::PID_FILE)
+            .with_context(|| format!("Failed to remove invalid pid file {}", defs::PID_FILE))?;
+        return Ok(());
+    };
+
+    let alive = unsafe { libc::kill(pid, 0) == 0 || *libc::__error() == libc::EPERM };
+    if !alive {
+        match fs::remove_file(defs::PID_FILE) {
+            Ok(()) => {}
+            Err(err) if err.kind() == ErrorKind::NotFound => {}
+            Err(err) => {
+                return Err(err).with_context(|| {
+                    format!("Failed to remove stale pid file {}", defs::PID_FILE)
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
+fn mark_state_stopped_if_offline() -> Result<()> {
+    let mut state = RuntimeState::load().unwrap_or_default();
+    if !state.daemon.alive {
+        return Ok(());
+    }
+    state.set_daemon_state(false, "");
+    state.save()
 }
 
 fn write_pid_file() -> Result<()> {
@@ -364,6 +454,14 @@ fn refresh_runtime_snapshot(config: &Config, state: &Arc<Mutex<RuntimeState>>) -
 
 fn to_value<T: Serialize>(payload: &T) -> Result<Value> {
     serde_json::to_value(payload).context("Failed to encode daemon payload")
+}
+
+fn install_shutdown_flag() -> Result<Arc<AtomicBool>> {
+    let shutdown = Arc::new(AtomicBool::new(false));
+    flag::register(SIGTERM, shutdown.clone()).context("Failed to register SIGTERM handler")?;
+    flag::register(SIGINT, shutdown.clone()).context("Failed to register SIGINT handler")?;
+    flag::register(SIGHUP, shutdown.clone()).context("Failed to register SIGHUP handler")?;
+    Ok(shutdown)
 }
 
 fn parse_uname_mode(mode: &str) -> Result<KasumiUnameMode> {
@@ -417,6 +515,27 @@ fn detect_rule_file_type(path: &Path) -> Result<i32> {
             "unsupported source type for rule add: {} (use `merge` or `add-dir` for directories)",
             path.display()
         )
+    }
+}
+
+struct DaemonRuntimeGuard {
+    state: Arc<Mutex<RuntimeState>>,
+}
+
+impl DaemonRuntimeGuard {
+    fn new(state: Arc<Mutex<RuntimeState>>) -> Self {
+        Self { state }
+    }
+}
+
+impl Drop for DaemonRuntimeGuard {
+    fn drop(&mut self) {
+        if let Ok(mut guard) = self.state.lock() {
+            guard.set_daemon_state(false, "");
+            let _ = guard.save();
+        }
+        let _ = fs::remove_file(defs::PID_FILE);
+        let _ = fs::remove_file(defs::SOCKET_FILE);
     }
 }
 

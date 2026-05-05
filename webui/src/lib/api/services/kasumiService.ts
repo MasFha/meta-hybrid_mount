@@ -16,6 +16,20 @@ import { AppError } from "../core/error";
 
 const KASUMI_MODULE_NAME = "kasumi_lkm";
 
+async function applyKasumiRuntimeConfig(): Promise<void> {
+  await runHybridMountJson("kasumi apply-config-runtime", PATHS.BINARY);
+}
+
+async function updateKasumiConfig(
+  mutator: (config: Awaited<ReturnType<typeof loadConfigFromFile>>) => void,
+  options: { applyRuntime?: boolean } = {},
+): Promise<void> {
+  await mutateConfig(mutator);
+  if (options.applyRuntime !== false) {
+    await applyKasumiRuntimeConfig();
+  }
+}
+
 export async function getKasumiStatus(): Promise<KasumiStatus> {
   const [config, state] = await Promise.all([
     loadConfigFromFile(),
@@ -29,25 +43,25 @@ export async function getKasumiStatus(): Promise<KasumiStatus> {
 }
 
 export async function setKasumiEnabled(enabled: boolean): Promise<void> {
-  await mutateConfig((config) => {
+  await updateKasumiConfig((config) => {
     config.kasumi.enabled = enabled;
   });
 }
 
 export async function setKasumiStealth(enabled: boolean): Promise<void> {
-  await mutateConfig((config) => {
+  await updateKasumiConfig((config) => {
     config.kasumi.enable_stealth = enabled;
   });
 }
 
 export async function setKasumiHidexattr(enabled: boolean): Promise<void> {
-  await mutateConfig((config) => {
+  await updateKasumiConfig((config) => {
     config.kasumi.enable_hidexattr = enabled;
   });
 }
 
 export async function setKasumiDebug(enabled: boolean): Promise<void> {
-  await mutateConfig((config) => {
+  await updateKasumiConfig((config) => {
     config.kasumi.enable_kernel_debug = enabled;
   });
 }
@@ -65,7 +79,7 @@ export async function getOriginalKernelUname(): Promise<KernelUnameValues> {
 export async function setKasumiUnameMode(
   mode: "scoped" | "global",
 ): Promise<void> {
-  await mutateConfig((config) => {
+  await updateKasumiConfig((config) => {
     config.kasumi.uname_mode = mode === "global" ? "global" : "scoped";
   });
 }
@@ -73,7 +87,7 @@ export async function setKasumiUnameMode(
 export async function setKasumiUname(
   uname: Partial<KasumiUnameConfig>,
 ): Promise<void> {
-  await mutateConfig((config) => {
+  await updateKasumiConfig((config) => {
     config.kasumi.uname = {
       ...config.kasumi.uname,
       ...uname,
@@ -101,18 +115,21 @@ export async function applyKasumiUname(
 
 export async function clearKasumiUname(): Promise<void> {
   const previousConfig = await loadConfigFromFile();
-  await mutateConfig((config) => {
-    config.kasumi.uname = {
-      sysname: "",
-      nodename: "",
-      release: "",
-      version: "",
-      machine: "",
-      domainname: "",
-    };
-    config.kasumi.uname_release = "";
-    config.kasumi.uname_version = "";
-  });
+  await updateKasumiConfig(
+    (config) => {
+      config.kasumi.uname = {
+        sysname: "",
+        nodename: "",
+        release: "",
+        version: "",
+        machine: "",
+        domainname: "",
+      };
+      config.kasumi.uname_release = "";
+      config.kasumi.uname_version = "";
+    },
+    { applyRuntime: false },
+  );
   await runCommandExpectOk(
     `${PATHS.BINARY} kasumi clear-uname --mode ${
       previousConfig.kasumi.uname_mode === "global" ? "global" : "scoped"
@@ -125,13 +142,13 @@ export async function restoreKasumiUnameGlobal(): Promise<void> {
 }
 
 export async function setKasumiCmdline(value: string): Promise<void> {
-  await mutateConfig((config) => {
+  await updateKasumiConfig((config) => {
     config.kasumi.cmdline_value = value;
   });
 }
 
 export async function clearKasumiCmdline(): Promise<void> {
-  await mutateConfig((config) => {
+  await updateKasumiConfig((config) => {
     config.kasumi.cmdline_value = "";
   });
 }
@@ -143,7 +160,7 @@ export async function addKasumiMapsRule(rule: {
   spoofed_dev: number;
   spoofed_pathname: string;
 }): Promise<void> {
-  await mutateConfig((config) => {
+  await updateKasumiConfig((config) => {
     const nextRule = {
       target_ino: Math.max(0, Math.trunc(Number(rule.target_ino) || 0)),
       target_dev: Math.max(0, Math.trunc(Number(rule.target_dev) || 0)),
@@ -164,7 +181,7 @@ export async function addKasumiMapsRule(rule: {
 }
 
 export async function clearKasumiMapsRules(): Promise<void> {
-  await mutateConfig((config) => {
+  await updateKasumiConfig((config) => {
     config.kasumi.maps_rules = [];
   });
 }
@@ -205,21 +222,30 @@ export async function unloadKasumiLkm(): Promise<void> {
 }
 
 export async function setKasumiLkmAutoload(enabled: boolean): Promise<void> {
-  await mutateConfig((config) => {
-    config.kasumi.lkm_autoload = enabled;
-  });
+  await updateKasumiConfig(
+    (config) => {
+      config.kasumi.lkm_autoload = enabled;
+    },
+    { applyRuntime: false },
+  );
 }
 
 export async function setKasumiLkmKmi(value: string): Promise<void> {
-  await mutateConfig((config) => {
-    config.kasumi.lkm_kmi_override = value;
-  });
+  await updateKasumiConfig(
+    (config) => {
+      config.kasumi.lkm_kmi_override = value;
+    },
+    { applyRuntime: false },
+  );
 }
 
 export async function clearKasumiLkmKmi(): Promise<void> {
-  await mutateConfig((config) => {
-    config.kasumi.lkm_kmi_override = "";
-  });
+  await updateKasumiConfig(
+    (config) => {
+      config.kasumi.lkm_kmi_override = "";
+    },
+    { applyRuntime: false },
+  );
 }
 
 export async function fixKasumiMounts(): Promise<void> {
@@ -236,4 +262,8 @@ export async function releaseKasumiConnection(): Promise<void> {
 
 export async function invalidateKasumiCache(): Promise<void> {
   await runCommandExpectOk(`${PATHS.BINARY} kasumi invalidate-cache`);
+}
+
+export async function applyKasumiConfigRuntime(): Promise<void> {
+  await applyKasumiRuntimeConfig();
 }
