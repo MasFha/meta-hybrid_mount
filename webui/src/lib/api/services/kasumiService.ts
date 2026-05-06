@@ -78,11 +78,7 @@ export async function setKasumiUnameMode(
 export async function setKasumiUname(
   uname: Partial<KasumiUnameConfig>,
 ): Promise<void> {
-  await updateKasumiConfig({
-    uname,
-    ...(uname.release !== undefined ? { uname_release: uname.release } : {}),
-    ...(uname.version !== undefined ? { uname_version: uname.version } : {}),
-  });
+  await updateKasumiConfig({ uname });
 }
 
 export async function applyKasumiUname(
@@ -115,8 +111,6 @@ export async function clearKasumiUname(
         machine: "",
         domainname: "",
       },
-      uname_release: "",
-      uname_version: "",
     },
     { applyRuntime: false },
   );

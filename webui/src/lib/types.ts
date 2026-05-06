@@ -129,8 +129,6 @@ export interface KasumiConfig {
   hide_uids: number[];
   uname_mode: KasumiUnameMode;
   uname: KasumiUnameConfig;
-  uname_release: string;
-  uname_version: string;
   cmdline_value: string;
   kstat_rules: KasumiKstatRuleConfig[];
   maps_rules: KasumiMapsRuleConfig[];

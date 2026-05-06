@@ -3,12 +3,37 @@ import { AppError } from "./error";
 import {
   parseHybridMountJsonOutput,
   readModuleProp,
+  resolveShouldUseMock,
   shouldUseMock,
 } from "./bridge";
 
 describe("parseHybridMountJsonOutput", () => {
-  it("only enables the mock API in test mode", () => {
+  it("enables the mock API in test mode", () => {
     expect(shouldUseMock).toBe(true);
+  });
+
+  it("uses mock mode by default during vite dev", () => {
+    expect(resolveShouldUseMock({ MODE: "development", DEV: true })).toBe(true);
+  });
+
+  it("allows disabling mock mode explicitly", () => {
+    expect(
+      resolveShouldUseMock({
+        MODE: "development",
+        DEV: true,
+        VITE_USE_MOCK: "false",
+      }),
+    ).toBe(false);
+  });
+
+  it("allows enabling mock mode explicitly outside dev and test", () => {
+    expect(
+      resolveShouldUseMock({
+        MODE: "production",
+        DEV: false,
+        VITE_USE_MOCK: "true",
+      }),
+    ).toBe(true);
   });
 
   it("parses valid JSON payloads", () => {

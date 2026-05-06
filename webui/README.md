@@ -108,6 +108,8 @@ pnpm preview
 pnpm lint
 ```
 
+`pnpm dev` uses `MockAPI` by default. To run the dev server against a real KernelSU bridge, start it with `VITE_USE_MOCK=false pnpm dev`.
+
 ## Adapter Notes
 
 - Keep **error semantics structured** (code + message), avoid UI parsing of raw stderr text.

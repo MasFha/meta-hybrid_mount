@@ -1,7 +1,7 @@
 import { createSignal, createMemo, createRoot } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { API } from "../api";
-import { normalizeModuleMode } from "../moduleMode";
+import { normalizeMountMode } from "../api/core/guards";
 import { uiStore } from "./uiStore";
 import type { Module, ModeStats } from "../types";
 
@@ -15,10 +15,10 @@ const createModuleStore = () => {
   function normalizeModule(module: Module): Module {
     return {
       ...module,
-      mode: normalizeModuleMode(module.mode),
+      mode: normalizeMountMode(module.mode),
       rules: {
         ...module.rules,
-        default_mode: normalizeModuleMode(module.rules.default_mode),
+        default_mode: normalizeMountMode(module.rules.default_mode),
       },
     };
   }
@@ -27,7 +27,7 @@ const createModuleStore = () => {
     const stats = { overlay: 0, magic: 0, kasumi: 0 };
     modules.forEach((module) => {
       if (!module.is_mounted) return;
-      const mode = normalizeModuleMode(module.mode);
+      const mode = normalizeMountMode(module.mode);
       if (mode === "overlay") stats.overlay++;
       else if (mode === "magic") stats.magic++;
       else if (mode === "kasumi") stats.kasumi++;

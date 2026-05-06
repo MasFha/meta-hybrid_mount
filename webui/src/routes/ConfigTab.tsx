@@ -5,7 +5,7 @@ import { sysStore } from "../lib/stores/sysStore";
 import { kasumiStore } from "../lib/stores/kasumiStore";
 import { moduleStore } from "../lib/stores/moduleStore";
 import { ICONS } from "../lib/constants";
-import { setKasumiEnabled } from "../lib/api/services/kasumiService";
+import { API } from "../lib/api";
 import { getCookie, setCookie } from "../lib/cookies";
 import "./ConfigTab.css";
 import "@material/web/textfield/outlined-text-field.js";
@@ -108,7 +108,7 @@ export default function ConfigTab() {
     setShowKasumiWarning(false);
     setKasumiPending(true);
     try {
-      await setKasumiEnabled(enabled);
+      await API.setKasumiEnabled(enabled);
       kasumiStore.setEnabledOptimistic(enabled);
       void kasumiStore.refreshStatus(false);
       if (enabled) {
@@ -303,6 +303,7 @@ export default function ConfigTab() {
                   <button
                     class={`mode-item ${configStore.config.overlay_mode === mode ? "selected" : ""}`}
                     onClick={() => setOverlayMode(mode)}
+                    type="button"
                   >
                     <md-ripple></md-ripple>
                     <div class="mode-info">
@@ -333,6 +334,7 @@ export default function ConfigTab() {
             <button
               class={`option-tile clickable tertiary ${configStore.config.disable_umount ? "active" : ""}`}
               onClick={() => toggle("disable_umount")}
+              type="button"
             >
               <md-ripple></md-ripple>
               <div class="tile-top">
@@ -352,6 +354,7 @@ export default function ConfigTab() {
             <button
               class={`option-tile clickable tertiary ${configStore.config.enable_overlay_fallback ? "active" : ""}`}
               onClick={() => toggle("enable_overlay_fallback")}
+              type="button"
             >
               <md-ripple></md-ripple>
               <div class="tile-top">
@@ -380,31 +383,33 @@ export default function ConfigTab() {
           <div class="options-grid">
             <button
               class={`option-tile clickable secondary ${kasumiStore.enabled ? "active" : ""}`}
-              onClick={() => {
-                if (!kasumiPending()) {
-                  void handleKasumiToggle();
-                }
-              }}
-              disabled={kasumiPending()}
+              onClick={handleKasumiToggle}
+              disabled={kasumiPending() || kasumiStore.loading}
+              type="button"
               aria-pressed={kasumiStore.enabled}
+              aria-label={
+                uiStore.L.config?.kasumiMasterSwitch || "Enable Kasumi"
+              }
             >
               <md-ripple></md-ripple>
               <div class="tile-top">
                 <div class="tile-icon">
                   <md-icon>
                     <svg viewBox="0 0 24 24">
-                      <path d={ICONS.cat_paw} />
+                      <path
+                        d={
+                          kasumiStore.enabled
+                            ? ICONS.snowflake_filled
+                            : ICONS.snowflake
+                        }
+                      />
                     </svg>
                   </md-icon>
                 </div>
               </div>
               <div class="tile-bottom">
                 <span class="tile-label">
-                  {uiStore.L.config?.kasumiToggle ?? "Enable Kasumi"}
-                </span>
-                <span class="tile-desc">
-                  {uiStore.L.config?.kasumiToggleDesc ??
-                    "Expose the Kasumi tab and allow Kasumi-backed routing."}
+                  {uiStore.L.config?.kasumiMasterTitle ?? "Experimental Kasumi"}
                 </span>
               </div>
             </button>

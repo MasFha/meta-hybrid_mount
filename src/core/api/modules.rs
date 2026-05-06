@@ -117,7 +117,7 @@ fn build_scanned_modules_payload(
             continue;
         }
 
-        let rules = load_module_rules(config, &id);
+        let rules = inventory::load_module_rules(config, &id);
         let enabled = !inventory::has_mount_block_marker(&module_path);
         let runtime_mode = enabled.then(|| module_runtime_mode(&id, state)).flatten();
         let mode = runtime_mode.unwrap_or(rules.default_mode);
@@ -149,7 +149,7 @@ fn build_runtime_modules_payload(config: &Config, state: &RuntimeState) -> Vec<M
         .filter(|id| !inventory::is_reserved_module_dir(id))
         .map(|id| {
             let source_path = config.moduledir.join(&id);
-            let rules = load_module_rules(config, &id);
+            let rules = inventory::load_module_rules(config, &id);
             let runtime_mode = module_runtime_mode(&id, state);
             let mode = runtime_mode.unwrap_or(rules.default_mode);
             let enabled = !state.skip_mount_modules.iter().any(|item| item == &id);
@@ -213,20 +213,6 @@ pub fn build_version_payload() -> VersionPayload {
             metadata.version
         },
     }
-}
-
-fn load_module_rules(config: &Config, module_id: &str) -> ModuleRules {
-    let mut rules = ModuleRules {
-        default_mode: config.default_mode.as_mount_mode(),
-        ..Default::default()
-    };
-
-    if let Some(global_rules) = config.rules.get(module_id) {
-        rules.default_mode = global_rules.default_mode;
-        rules.paths.extend(global_rules.paths.clone());
-    }
-
-    rules
 }
 
 fn module_runtime_mode(module_id: &str, state: &RuntimeState) -> Option<MountMode> {

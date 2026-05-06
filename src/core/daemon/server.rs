@@ -700,8 +700,7 @@ fn dispatch_command(
             let config: Config =
                 serde_json::from_value(payload).context("Failed to decode config payload")?;
             config.save_to_file(config_path)?;
-            refresh_runtime_snapshot(&config, state)?;
-            to_value(&json!({ "saved": true, "config": config }))
+            refresh_and_to_value(&config, state, json!({ "saved": true, "config": &config }))
         }
         DaemonCommand::ApiConfigPatch {
             patch,
@@ -715,20 +714,22 @@ fn dispatch_command(
             } else {
                 false
             };
-            refresh_runtime_snapshot(&config, state)?;
-            to_value(&json!({
-                "saved": true,
-                "applied": applied,
-                "config": config,
-            }))
+            refresh_and_to_value(
+                &config,
+                state,
+                json!({
+                    "saved": true,
+                    "applied": applied,
+                    "config": &config,
+                }),
+            )
         }
         DaemonCommand::ApiConfigReset => {
             let config = Config::default();
             config.save_to_file(config_path)?;
             kasumi_mount::apply_runtime_config(&config)?;
             kasumi::invalidate_status_cache();
-            refresh_runtime_snapshot(&config, state)?;
-            to_value(&json!({ "saved": true, "config": config }))
+            refresh_and_to_value(&config, state, json!({ "saved": true, "config": &config }))
         }
         DaemonCommand::ApiModulesList { path } => {
             let snapshot = state.lock().expect("daemon state poisoned").clone();
@@ -741,8 +742,7 @@ fn dispatch_command(
         DaemonCommand::ApiModulesApply { modules } => {
             let payload = api::apply_modules_payload(config_path, &modules)?;
             let config = load_runtime_config(config_path)?;
-            refresh_runtime_snapshot(&config, state)?;
-            to_value(&payload)
+            refresh_and_to_value(&config, state, payload)
         }
         DaemonCommand::ApiLkm => to_value(&api::build_lkm_payload(config)),
         DaemonCommand::ApiHooks => {
@@ -762,13 +762,16 @@ fn dispatch_command(
             let updated = add_kasumi_maps_config_rule(config_path, rule)?;
             kasumi_mount::apply_runtime_config(&updated)?;
             kasumi::invalidate_status_cache();
-            refresh_runtime_snapshot(&updated, state)?;
             let count = updated.kasumi.maps_rules.len();
-            to_value(&json!({
-                "saved": true,
-                "config": updated,
-                "count": count,
-            }))
+            refresh_and_to_value(
+                &updated,
+                state,
+                json!({
+                    "saved": true,
+                    "config": &updated,
+                    "count": count,
+                }),
+            )
         }
         DaemonCommand::ApiKasumiMapsClear => {
             let mut updated = load_runtime_config(config_path)?;
@@ -776,12 +779,15 @@ fn dispatch_command(
             updated.save_to_file(config_path)?;
             kasumi_mount::apply_runtime_config(&updated)?;
             kasumi::invalidate_status_cache();
-            refresh_runtime_snapshot(&updated, state)?;
-            to_value(&json!({
-                "saved": true,
-                "config": updated,
-                "count": 0,
-            }))
+            refresh_and_to_value(
+                &updated,
+                state,
+                json!({
+                    "saved": true,
+                    "config": &updated,
+                    "count": 0,
+                }),
+            )
         }
         DaemonCommand::KasumiStatus => {
             let runtime_state = state.lock().expect("daemon state poisoned").clone();
@@ -822,8 +828,7 @@ fn dispatch_command(
         DaemonCommand::KasumiApplyConfigRuntime => {
             let applied = kasumi_mount::apply_runtime_config(config)?;
             kasumi::invalidate_status_cache();
-            refresh_runtime_snapshot(config, state)?;
-            to_value(&json!({ "applied": applied }))
+            refresh_and_to_value(config, state, json!({ "applied": applied }))
         }
         DaemonCommand::HideList => to_value(&user_hide_rules::load_user_hide_rules()?),
         DaemonCommand::HideAdd { path } => {
@@ -831,57 +836,67 @@ fn dispatch_command(
             if added && kasumi_mount::can_operate(config) {
                 kasumi::hide_path(&path)?;
             }
-            refresh_runtime_snapshot(config, state)?;
-            to_value(&json!({ "added": added, "path": path }))
+            refresh_and_to_value(config, state, json!({ "added": added, "path": path }))
         }
         DaemonCommand::HideRemove { path } => {
             let removed = user_hide_rules::remove_user_hide_rule(&path)?;
-            refresh_runtime_snapshot(config, state)?;
-            to_value(&json!({ "removed": removed, "path": path }))
+            refresh_and_to_value(config, state, json!({ "removed": removed, "path": path }))
         }
         DaemonCommand::HideApply => {
             kasumi_mount::require_live(config, "apply user hide rules")?;
             let (applied, failed) = user_hide_rules::apply_user_hide_rules()?;
-            refresh_runtime_snapshot(config, state)?;
-            to_value(&json!({ "applied": applied, "failed": failed }))
+            refresh_and_to_value(
+                config,
+                state,
+                json!({ "applied": applied, "failed": failed }),
+            )
         }
         DaemonCommand::LkmStatus => to_value(&api::build_lkm_payload(config)),
         DaemonCommand::LkmLoad => {
             lkm::load(&config.kasumi)?;
             kasumi::invalidate_status_cache();
-            refresh_runtime_snapshot(config, state)?;
-            to_value(&json!({ "message": "Kasumi LKM loaded." }))
+            refresh_and_to_value(config, state, json!({ "message": "Kasumi LKM loaded." }))
         }
         DaemonCommand::LkmUnload => {
             lkm::unload(&config.kasumi)?;
             kasumi::invalidate_status_cache();
-            refresh_runtime_snapshot(config, state)?;
-            to_value(&json!({ "message": "Kasumi LKM unloaded." }))
+            refresh_and_to_value(config, state, json!({ "message": "Kasumi LKM unloaded." }))
         }
         DaemonCommand::KasumiClear => {
             kasumi::clear_rules()?;
-            refresh_runtime_snapshot(config, state)?;
-            to_value(&json!({ "message": "Kasumi rules cleared." }))
+            refresh_and_to_value(config, state, json!({ "message": "Kasumi rules cleared." }))
         }
         DaemonCommand::KasumiReleaseConnection => {
             kasumi::release_connection();
-            refresh_runtime_snapshot(config, state)?;
-            to_value(&json!({ "message": "Released cached Kasumi client connection." }))
+            refresh_and_to_value(
+                config,
+                state,
+                json!({ "message": "Released cached Kasumi client connection." }),
+            )
         }
         DaemonCommand::KasumiInvalidateCache => {
             kasumi::invalidate_status_cache();
-            refresh_runtime_snapshot(config, state)?;
-            to_value(&json!({ "message": "Invalidated cached Kasumi status." }))
+            refresh_and_to_value(
+                config,
+                state,
+                json!({ "message": "Invalidated cached Kasumi status." }),
+            )
         }
         DaemonCommand::KasumiFixMounts => {
             kasumi::fix_mounts()?;
-            refresh_runtime_snapshot(config, state)?;
-            to_value(&json!({ "message": "Kasumi mount ordering fixed." }))
+            refresh_and_to_value(
+                config,
+                state,
+                json!({ "message": "Kasumi mount ordering fixed." }),
+            )
         }
         DaemonCommand::KasumiRestoreUnameGlobal => {
             kasumi::restore_uname_global()?;
-            refresh_runtime_snapshot(config, state)?;
-            to_value(&json!({ "message": "Kasumi global uname restored." }))
+            refresh_and_to_value(
+                config,
+                state,
+                json!({ "message": "Kasumi global uname restored." }),
+            )
         }
         DaemonCommand::KasumiSetUname {
             mode,
@@ -890,13 +905,16 @@ fn dispatch_command(
         } => {
             let mode = parse_uname_mode(&mode)?;
             apply_uname(mode, &release, &version)?;
-            refresh_runtime_snapshot(config, state)?;
-            to_value(&json!({
-                "message": "Kasumi uname applied.",
-                "mode": display_uname_mode(mode),
-                "release": release,
-                "version": version,
-            }))
+            refresh_and_to_value(
+                config,
+                state,
+                json!({
+                    "message": "Kasumi uname applied.",
+                    "mode": display_uname_mode(mode),
+                    "release": release,
+                    "version": version,
+                }),
+            )
         }
         DaemonCommand::KasumiClearUname { mode } => {
             let mode = parse_uname_mode(&mode)?;
@@ -904,11 +922,14 @@ fn dispatch_command(
                 KasumiUnameMode::Scoped => apply_uname(KasumiUnameMode::Scoped, "", "")?,
                 KasumiUnameMode::Global => kasumi::restore_uname_global()?,
             }
-            refresh_runtime_snapshot(config, state)?;
-            to_value(&json!({
-                "message": "Kasumi uname cleared.",
-                "mode": display_uname_mode(mode),
-            }))
+            refresh_and_to_value(
+                config,
+                state,
+                json!({
+                    "message": "Kasumi uname cleared.",
+                    "mode": display_uname_mode(mode),
+                }),
+            )
         }
         DaemonCommand::KasumiRuleAdd {
             target,
@@ -917,62 +938,80 @@ fn dispatch_command(
         } => {
             let file_type = file_type.unwrap_or(detect_rule_file_type(&source)?);
             kasumi::add_rule(&target, &source, file_type)?;
-            refresh_runtime_snapshot(config, state)?;
-            to_value(&json!({
-                "message": "Kasumi ADD rule applied.",
-                "target": target,
-                "source": source,
-                "file_type": file_type,
-            }))
+            refresh_and_to_value(
+                config,
+                state,
+                json!({
+                    "message": "Kasumi ADD rule applied.",
+                    "target": target,
+                    "source": source,
+                    "file_type": file_type,
+                }),
+            )
         }
         DaemonCommand::KasumiRuleMerge { target, source } => {
             kasumi::add_merge_rule(&target, &source)?;
-            refresh_runtime_snapshot(config, state)?;
-            to_value(&json!({
-                "message": "Kasumi MERGE rule applied.",
-                "target": target,
-                "source": source,
-            }))
+            refresh_and_to_value(
+                config,
+                state,
+                json!({
+                    "message": "Kasumi MERGE rule applied.",
+                    "target": target,
+                    "source": source,
+                }),
+            )
         }
         DaemonCommand::KasumiRuleHide { path } => {
             kasumi::hide_path(&path)?;
-            refresh_runtime_snapshot(config, state)?;
-            to_value(&json!({
-                "message": "Kasumi HIDE rule applied.",
-                "path": path,
-            }))
+            refresh_and_to_value(
+                config,
+                state,
+                json!({
+                    "message": "Kasumi HIDE rule applied.",
+                    "path": path,
+                }),
+            )
         }
         DaemonCommand::KasumiRuleDelete { path } => {
             kasumi::delete_rule(&path)?;
-            refresh_runtime_snapshot(config, state)?;
-            to_value(&json!({
-                "message": "Kasumi rule deleted.",
-                "path": path,
-            }))
+            refresh_and_to_value(
+                config,
+                state,
+                json!({
+                    "message": "Kasumi rule deleted.",
+                    "path": path,
+                }),
+            )
         }
         DaemonCommand::KasumiRuleAddDir {
             target_base,
             source_dir,
         } => {
             kasumi::add_rules_from_directory(&target_base, &source_dir)?;
-            refresh_runtime_snapshot(config, state)?;
-            to_value(&json!({
-                "message": "Kasumi directory rules applied.",
-                "target_base": target_base,
-                "source_dir": source_dir,
-            }))
+            refresh_and_to_value(
+                config,
+                state,
+                json!({
+                    "message": "Kasumi directory rules applied.",
+                    "target_base": target_base,
+                    "source_dir": source_dir,
+                }),
+            )
         }
         DaemonCommand::KasumiRuleRemoveDir {
             target_base,
             source_dir,
         } => {
             kasumi::remove_rules_from_directory(&target_base, &source_dir)?;
-            refresh_runtime_snapshot(config, state)?;
-            to_value(&json!({
-                "message": "Kasumi directory rules removed.",
-                "target_base": target_base,
-                "source_dir": source_dir,
-            }))
+            refresh_and_to_value(
+                config,
+                state,
+                json!({
+                    "message": "Kasumi directory rules removed.",
+                    "target_base": target_base,
+                    "source_dir": source_dir,
+                }),
+            )
         }
     }
 }
@@ -1052,6 +1091,15 @@ fn write_pid_file() -> Result<()> {
         format!("{}\n", std::process::id()).as_bytes(),
     )
     .with_context(|| format!("Failed to write pid file {}", defs::PID_FILE))
+}
+
+fn refresh_and_to_value<T: Serialize>(
+    config: &Config,
+    state: &Arc<Mutex<RuntimeState>>,
+    payload: T,
+) -> Result<Value> {
+    refresh_runtime_snapshot(config, state)?;
+    to_value(&payload)
 }
 
 fn refresh_runtime_snapshot(config: &Config, state: &Arc<Mutex<RuntimeState>>) -> Result<()> {

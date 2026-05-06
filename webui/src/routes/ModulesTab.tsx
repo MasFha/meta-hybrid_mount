@@ -14,7 +14,7 @@ import { kasumiStore } from "../lib/stores/kasumiStore";
 import { ICONS } from "../lib/constants";
 import Skeleton from "../components/Skeleton";
 import BottomActions from "../components/BottomActions";
-import { normalizeModuleMode } from "../lib/moduleMode";
+import { normalizeMountMode } from "../lib/api/core/guards";
 import type { Module, MountMode } from "../lib/types";
 import "./ModulesTab.css";
 import "@material/web/iconbutton/filled-tonal-icon-button.js";
@@ -99,7 +99,7 @@ export default function ModulesTab() {
       if (!matchSearch) return false;
       if (
         filterType() !== "all" &&
-        normalizeModuleMode(module.mode) !== filterType()
+        normalizeMountMode(module.mode) !== filterType()
       ) {
         return false;
       }
@@ -126,9 +126,9 @@ export default function ModulesTab() {
   function getModeLabel(mod: Module) {
     const modes = uiStore.L.modules?.modes;
     if (!mod.is_mounted) return modes?.umount ?? "Umount";
-    if (normalizeModuleMode(mod.mode) === "magic")
+    if (normalizeMountMode(mod.mode) === "magic")
       return modes?.magic ?? "Magic";
-    if (normalizeModuleMode(mod.mode) === "kasumi") {
+    if (normalizeMountMode(mod.mode) === "kasumi") {
       return modes?.kasumi ?? "Kasumi";
     }
     return modes?.overlay ?? "OverlayFS";
@@ -136,13 +136,13 @@ export default function ModulesTab() {
 
   function getModeClass(mod: Module) {
     if (!mod.is_mounted) return "mode-ignore";
-    if (normalizeModuleMode(mod.mode) === "magic") return "mode-magic";
-    if (normalizeModuleMode(mod.mode) === "kasumi") return "mode-kasumi";
+    if (normalizeMountMode(mod.mode) === "magic") return "mode-magic";
+    if (normalizeMountMode(mod.mode) === "kasumi") return "mode-kasumi";
     return "mode-overlay";
   }
 
   function getEffectiveDefaultMode(mod: Module): MountMode {
-    const mode = normalizeModuleMode(mod.rules.default_mode);
+    const mode = normalizeMountMode(mod.rules.default_mode);
     if (mode === "kasumi" && !kasumiAvailable()) {
       return "ignore";
     }

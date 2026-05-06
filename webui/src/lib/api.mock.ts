@@ -25,6 +25,7 @@ function createMockState() {
     kasumi: {
       enabled: true,
       lkmLoaded: true,
+      ruleCount: 3,
       lkmAutoload: true,
       kmiOverride: "",
       mirrorPath: "/dev/kasumi_mirror",
@@ -112,8 +113,6 @@ function buildMockKasumiConfig(enabled: boolean): KasumiStatus["config"] {
     hide_uids: [...kasumi.hideUids],
     uname_mode: kasumi.unameMode,
     uname: { ...kasumi.uname },
-    uname_release: kasumi.uname.release,
-    uname_version: kasumi.uname.version,
     cmdline_value: kasumi.cmdline,
     kstat_rules: [],
     maps_rules: kasumi.mapsRules.map((rule) => ({ ...rule })),
@@ -164,7 +163,7 @@ function buildMockKasumiStatus(): KasumiStatus {
         ]
       : [],
     hooks: available ? ["d_path", "iterate_dir", "vfs_getattr"] : [],
-    rule_count: available ? 3 : 0,
+    rule_count: available ? kasumi.ruleCount : 0,
     user_hide_rule_count: kasumi.userHideRules.length,
     mirror_path: kasumi.mirrorPath,
     lkm,
@@ -430,6 +429,7 @@ export const MockAPI: AppAPI = {
   },
   async clearKasumiRules(): Promise<void> {
     await delay(180);
+    mockState.kasumi.ruleCount = 0;
   },
   async releaseKasumiConnection(): Promise<void> {
     await delay(120);

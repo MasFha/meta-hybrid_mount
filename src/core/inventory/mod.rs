@@ -17,7 +17,21 @@ pub mod listing;
 
 pub use discovery::*;
 
-use crate::defs;
+use crate::{conf::config::Config, defs, domain::ModuleRules};
+
+pub fn load_module_rules(config: &Config, module_id: &str) -> ModuleRules {
+    let mut rules = ModuleRules {
+        default_mode: config.default_mode.as_mount_mode(),
+        ..Default::default()
+    };
+
+    if let Some(global_rules) = config.rules.get(module_id) {
+        rules.default_mode = global_rules.default_mode;
+        rules.paths.extend(global_rules.paths.clone());
+    }
+
+    rules
+}
 
 pub fn is_reserved_module_dir(id: &str) -> bool {
     matches!(

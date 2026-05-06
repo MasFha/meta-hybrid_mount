@@ -21,6 +21,12 @@ type DaemonCommandPayload = Record<string, unknown>;
 
 let ksuExec: KsuModule["exec"] | null = null;
 
+interface MockModeEnv {
+  MODE?: string;
+  DEV?: boolean;
+  VITE_USE_MOCK?: string;
+}
+
 function hasKsuBridge(): boolean {
   const bridge = (globalThis as { ksu?: unknown }).ksu;
   return typeof bridge === "object" && bridge !== null && "exec" in bridge;
@@ -33,7 +39,18 @@ if (hasKsuBridge()) {
   } catch {}
 }
 
-export const shouldUseMock = import.meta.env.MODE === "test";
+export function resolveShouldUseMock(env: MockModeEnv): boolean {
+  const override = env.VITE_USE_MOCK?.trim().toLowerCase();
+  if (override === "false" || override === "0" || override === "off") {
+    return false;
+  }
+  if (override === "true" || override === "1" || override === "on") {
+    return true;
+  }
+  return Boolean(env.DEV) || env.MODE === "test";
+}
+
+export const shouldUseMock = resolveShouldUseMock(import.meta.env);
 export const defaultVersion = APP_VERSION;
 export const hasExecBridge = Boolean(ksuExec);
 const DAEMON_WAKE_TIMEOUT_MS = 5000;

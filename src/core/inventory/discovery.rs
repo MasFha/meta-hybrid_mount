@@ -21,20 +21,6 @@ use anyhow::Result;
 
 use crate::{conf::config, core::inventory, domain::ModuleRules};
 
-fn load_module_rules(module_id: &str, cfg: &config::Config) -> ModuleRules {
-    let mut rules = ModuleRules {
-        default_mode: cfg.default_mode.as_mount_mode(),
-        ..Default::default()
-    };
-
-    if let Some(global_rules) = cfg.rules.get(module_id) {
-        rules.default_mode = global_rules.default_mode;
-        rules.paths.extend(global_rules.paths.clone());
-    }
-
-    rules
-}
-
 #[derive(Debug, Clone)]
 pub struct Module {
     pub id: String,
@@ -84,7 +70,7 @@ pub fn scan(source_dir: &Path, cfg: &config::Config) -> Result<Vec<Module>> {
         modules.push(Module {
             id: id.clone(),
             source_path: path,
-            rules: load_module_rules(&id, cfg),
+            rules: inventory::load_module_rules(cfg, &id),
         });
     }
 

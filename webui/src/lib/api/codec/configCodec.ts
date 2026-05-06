@@ -113,12 +113,6 @@ export function normalizeKasumiConfig(value: unknown): KasumiConfig {
       : [],
     uname_mode: normalizeKasumiUnameMode(next.uname_mode),
     uname,
-    uname_release: isString(next.uname_release)
-      ? next.uname_release
-      : uname.release,
-    uname_version: isString(next.uname_version)
-      ? next.uname_version
-      : uname.version,
     cmdline_value: isString(next.cmdline_value) ? next.cmdline_value : "",
     kstat_rules: Array.isArray(next.kstat_rules)
       ? next.kstat_rules.filter(isRecord).map((item) => ({

@@ -108,6 +108,8 @@ pnpm preview
 pnpm lint
 ```
 
+`pnpm dev` 默认使用 `MockAPI`。如需在开发服务器中连接真实 KernelSU bridge，可使用 `VITE_USE_MOCK=false pnpm dev`。
+
 ## 适配说明
 
 - 错误返回建议使用 **结构化语义**（错误码 + 错误消息），避免 UI 解析原始 stderr。
