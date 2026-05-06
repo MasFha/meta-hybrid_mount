@@ -1,4 +1,14 @@
 
+## v3.6.1
+
+
+### <!-- 1 --> Features
+
+- Add jq installation to Dockerfile and ensure jq is available in release workflow
+
+
+
+
 ## v3.5.6
 
 
