@@ -43,6 +43,8 @@ jobs:
       packages: read
     steps:
       - uses: actions/checkout@v6
+      - name: Trust checkout directory
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
       - name: Format codes

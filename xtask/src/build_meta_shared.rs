@@ -14,7 +14,7 @@
 
 use std::process::Command;
 
-use anyhow::Result;
+use anyhow::{Context, Result, bail};
 use semver::Version;
 use serde::Deserialize;
 
@@ -64,14 +64,21 @@ pub fn calculate_version_code(version_str: &str) -> Result<String> {
 }
 
 pub fn git_commit_count() -> Result<i32> {
-    Ok(String::from_utf8(
-        Command::new("git")
-            .args(["rev-list", "--count", "HEAD"])
-            .output()?
-            .stdout,
-    )?
-    .trim()
-    .parse::<i32>()?)
+    let output = Command::new("git")
+        .args(["rev-list", "--count", "HEAD"])
+        .output()
+        .context("failed to run git rev-list")?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        bail!("git rev-list --count HEAD failed: {}", stderr.trim());
+    }
+
+    let stdout = String::from_utf8(output.stdout)?;
+    stdout
+        .trim()
+        .parse::<i32>()
+        .with_context(|| format!("invalid git commit count: {stdout:?}"))
 }
 
 pub fn render_module_prop(data: &ModulePropData<'_>) -> String {
