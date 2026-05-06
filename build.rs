@@ -38,11 +38,8 @@ fn gen_kasumi_uapi_bindings() -> Result<()> {
     let out_dir = PathBuf::from(
         env::var_os("OUT_DIR").ok_or_else(|| anyhow!("OUT_DIR is not set for build script"))?,
     );
-    let bindgen_header = out_dir.join("kasumi_uapi_bindgen.h");
     let wrapper = out_dir.join("kasumi_uapi_wrapper.h");
     let bindings = out_dir.join("kasumi_uapi.rs");
-
-    write_bindgen_header(&header, &bindgen_header)?;
 
     fs::write(
         &wrapper,
@@ -57,23 +54,14 @@ typedef uint64_t __aligned_u64;
 #endif
 #include "{}"
 "#,
-            bindgen_header.display()
+            header.display()
         ),
     )?;
 
     bindgen::Builder::default()
         .header(wrapper.to_string_lossy())
         .allowlist_type("kasumi_.*")
-        .allowlist_var("KSM_MAGIC[12]")
-        .allowlist_var("KSM_PROTOCOL_VERSION")
-        .allowlist_var("KSM_MAX_LEN_PATHNAME")
-        .allowlist_var("KSM_FAKE_CMDLINE_SIZE")
-        .allowlist_var("KSM_UNAME_LEN")
-        .allowlist_var("KSM_SYSCALL_NR")
-        .allowlist_var("KSM_CMD_GET_FD")
-        .allowlist_var("KSM_PRCTL_GET_FD")
-        .allowlist_var("KSM_FEATURE_.*")
-        .allowlist_var("KSM_IOC_MAGIC")
+        .allowlist_var("KSM_.*")
         .derive_debug(true)
         .derive_copy(true)
         .derive_default(false)
@@ -84,27 +72,6 @@ typedef uint64_t __aligned_u64;
         .write_to_file(&bindings)
         .with_context(|| format!("failed to write {}", bindings.display()))?;
 
-    Ok(())
-}
-
-fn write_bindgen_header(header: &PathBuf, bindgen_header: &PathBuf) -> Result<()> {
-    let uapi = fs::read_to_string(header)
-        .with_context(|| format!("failed to read Kasumi UAPI header {}", header.display()))?;
-    let mut sanitized = String::new();
-
-    // Rust rebuilds ioctl opcodes with rustix; bindgen only needs the ABI structs and constants.
-    for line in uapi.lines() {
-        let trimmed = line.trim_start();
-        if trimmed.starts_with("#define KSM_IOC_") && !trimmed.starts_with("#define KSM_IOC_MAGIC")
-        {
-            continue;
-        }
-        sanitized.push_str(line);
-        sanitized.push('\n');
-    }
-
-    fs::write(bindgen_header, sanitized)
-        .with_context(|| format!("failed to write {}", bindgen_header.display()))?;
     Ok(())
 }
 
