@@ -117,10 +117,14 @@ impl PlannerContext {
                 partition_label,
             } = item;
 
-            let requested_mode = module
-                .rules
-                .get_mode(relative_path.to_string_lossy().as_ref());
-            let effective_mode = module.rules.effective_mode(&relative_path, self.use_kasumi);
+            let relative_key = relative_path.to_string_lossy();
+            let requested_mode = module.rules.get_mode(relative_key.as_ref());
+            let effective_mode = if matches!(requested_mode, MountMode::Kasumi) && !self.use_kasumi
+            {
+                MountMode::Ignore
+            } else {
+                requested_mode
+            };
             log_mode_decision(module, &relative_path, &requested_mode, &effective_mode);
 
             let has_descendant_rules = module.rules.has_descendant_rule(&relative_path);
@@ -317,12 +321,8 @@ pub(super) fn plan_module_roots(
                 };
 
                 let path = entry.path();
-                if !path.is_dir() {
-                    continue;
-                }
-
                 match entry.file_type() {
-                    Ok(file_type) if file_type.is_symlink() => continue,
+                    Ok(file_type) if file_type.is_symlink() || !file_type.is_dir() => continue,
                     Ok(_) => {}
                     Err(err) => {
                         crate::scoped_log!(

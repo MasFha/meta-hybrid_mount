@@ -1,6 +1,7 @@
 import { createSignal, createRoot } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { API } from "../api";
+import type { InitPayload } from "../api/contracts";
 import { normalizeConfig } from "../api/codec/configCodec";
 import { DEFAULT_CONFIG } from "../constants";
 import { uiStore } from "./uiStore";
@@ -42,6 +43,14 @@ const createConfigStore = () => {
     })();
 
     return pendingLoad;
+  }
+
+  function loadFromInit(payload: InitPayload) {
+    if (payload.config != null) {
+      const normalized = normalizeConfig(payload.config);
+      setConfigStore(reconcile(normalized));
+      hasLoaded = true;
+    }
   }
 
   function ensureConfigLoaded() {
@@ -124,6 +133,7 @@ const createConfigStore = () => {
     ensureConfigLoaded,
     invalidate,
     loadConfig,
+    loadFromInit,
     saveConfig,
     resetConfig,
   };

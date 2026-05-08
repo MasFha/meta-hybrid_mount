@@ -1,7 +1,10 @@
 import { createSignal, createRoot } from "solid-js";
 import { API } from "../api";
+import type { InitPayload } from "../api/contracts";
 import { APP_VERSION } from "../constants_gen";
 import { uiStore } from "./uiStore";
+import { isRecord, isString, isStringArray } from "../api/core/guards";
+import { buildModeStats, buildMountedCount } from "../api/codec/runtimeCodec";
 import type { StorageStatus, SystemInfo } from "../types";
 
 const createSysStore = () => {
@@ -19,6 +22,38 @@ const createSysStore = () => {
   let pendingVersionLoad: Promise<void> | null = null;
   let hasLoaded = false;
   let hasLoadedVersion = false;
+
+  function loadFromInit(payload: InitPayload) {
+    if (isString(payload.version)) {
+      setVersion(payload.version);
+      hasLoadedVersion = true;
+    }
+    const status = isRecord(payload.status) ? payload.status : null;
+    if (status) {
+      const modeStats = buildModeStats(status);
+      setStorage({
+        type:
+          isString(status.storage_mode) && status.storage_mode.trim()
+            ? (status.storage_mode as StorageStatus["type"])
+            : "unknown",
+        supported_modes: ["tmpfs", "ext4"],
+        modeStats,
+        mountedCount: buildMountedCount(status, modeStats),
+      });
+      setSystemInfo({
+        kernel: isString(status.mount_point) ? status.mount_point : "-",
+        selinux: "-",
+        mountBase: isString(status.mount_point) ? status.mount_point : "-",
+        activeMounts: isStringArray(status.active_mounts)
+          ? status.active_mounts
+          : [],
+      });
+      setActivePartitions(
+        isStringArray(status.active_mounts) ? status.active_mounts : [],
+      );
+      hasLoaded = true;
+    }
+  }
 
   async function loadStatus() {
     if (pendingLoad) return pendingLoad;
@@ -100,6 +135,32 @@ const createSysStore = () => {
     return loadVersion();
   }
 
+  function handleSseUpdate(state: unknown) {
+    const status = isRecord(state) ? state : null;
+    if (!status) return;
+    const modeStats = buildModeStats(status);
+    setStorage({
+      type:
+        isString(status.storage_mode) && (status.storage_mode as string).trim()
+          ? (status.storage_mode as StorageStatus["type"])
+          : "unknown",
+      supported_modes: ["tmpfs", "ext4"],
+      modeStats,
+      mountedCount: buildMountedCount(status, modeStats),
+    });
+    setSystemInfo({
+      kernel: isString(status.mount_point) ? status.mount_point : "-",
+      selinux: "-",
+      mountBase: isString(status.mount_point) ? status.mount_point : "-",
+      activeMounts: isStringArray(status.active_mounts)
+        ? status.active_mounts
+        : [],
+    });
+    setActivePartitions(
+      isStringArray(status.active_mounts) ? status.active_mounts : [],
+    );
+  }
+
   return {
     get version() {
       return version();
@@ -118,8 +179,10 @@ const createSysStore = () => {
     },
     ensureStatusLoaded,
     ensureVersionLoaded,
+    loadFromInit,
     loadStatus,
     loadVersion,
+    handleSseUpdate,
   };
 };
 

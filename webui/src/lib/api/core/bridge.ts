@@ -22,6 +22,7 @@ export type DaemonCommandPayload =
   | { type: "ping" }
   | { type: "webui-start" }
   | { type: "shutdown" }
+  | { type: "init" }
   | { type: "status" }
   | { type: "api-storage" }
   | { type: "api-mount-stats" }
@@ -55,7 +56,12 @@ export type DaemonCommandPayload =
   | { type: "kasumi-restore-uname-global" }
   | { type: "kasumi-set-uname"; mode: string; release: string; version: string }
   | { type: "kasumi-clear-uname"; mode: string }
-  | { type: "kasumi-rule-add"; target: string; source: string; file_type?: number }
+  | {
+      type: "kasumi-rule-add";
+      target: string;
+      source: string;
+      file_type?: number;
+    }
   | { type: "kasumi-rule-merge"; target: string; source: string }
   | { type: "kasumi-rule-hide"; path: string }
   | { type: "kasumi-rule-delete"; path: string }
@@ -67,7 +73,8 @@ export type DaemonCommandPayload =
   | { type: "hide-apply" }
   | { type: "lkm-status" }
   | { type: "lkm-load" }
-  | { type: "lkm-unload" };
+  | { type: "lkm-unload" }
+  | { type: "batch"; commands: DaemonCommandPayload[] };
 
 let ksuExec: KsuModule["exec"] | null = null;
 
@@ -109,6 +116,9 @@ const DAEMON_MODULES_TIMEOUT_MS = 15000;
 
 let daemonReady: Promise<void> | null = null;
 let webuiSession: WebuiSession | null = null;
+let sseSource: EventSource | null = null;
+type SseStateHandler = (state: unknown) => void;
+let sseHandlers: SseStateHandler[] = [];
 
 function requireExec(): KsuModule["exec"] {
   if (!ksuExec) throw new AppError("No KSU environment");
@@ -161,7 +171,9 @@ export async function ensureDaemonAwake(binaryPath: string): Promise<void> {
   if (!daemonReady) {
     daemonReady = (async () => {
       const raw = await withTimeout(
-        runCommandExpectOk(hybridMountCommand(binaryPath, "daemon webui-start")),
+        runCommandExpectOk(
+          hybridMountCommand(binaryPath, "daemon webui-start"),
+        ),
         DAEMON_WAKE_TIMEOUT_MS,
         "hybrid-mount daemon wake timed out",
       );
@@ -172,9 +184,12 @@ export async function ensureDaemonAwake(binaryPath: string): Promise<void> {
         typeof (payload as WebuiSession).base_url !== "string" ||
         typeof (payload as WebuiSession).token !== "string"
       ) {
-        throw new AppError("hybrid-mount daemon returned invalid WebUI session");
+        throw new AppError(
+          "hybrid-mount daemon returned invalid WebUI session",
+        );
       }
       webuiSession = payload as WebuiSession;
+      startSse();
     })().catch((error) => {
       daemonReady = null;
       webuiSession = null;
@@ -370,9 +385,13 @@ function daemonCommandFromArgs(args: string): DaemonCommandPayload {
         };
       }
       case "modules-apply":
+        const modules = jsonArg(tokens[2], "modules");
+        if (!Array.isArray(modules)) {
+          throw new AppError("modules payload must be an array");
+        }
         return {
           type: "api-modules-apply",
-          modules: jsonArg(tokens[2], "modules"),
+          modules,
         };
       case "lkm":
         return { type: "api-lkm" };
@@ -505,4 +524,53 @@ export async function runDaemonCommand(
     throw lastError;
   }
   throw new AppError("hybrid-mount daemon WebUI session is unavailable");
+}
+
+export function onSseStateUpdate(handler: SseStateHandler): () => void {
+  sseHandlers.push(handler);
+  return () => {
+    sseHandlers = sseHandlers.filter((h) => h !== handler);
+  };
+}
+
+export function startSse(): void {
+  if (shouldUseMock || !hasExecBridge) return;
+  const session = webuiSession;
+  if (!session) return;
+
+  if (sseSource) {
+    sseSource.close();
+    sseSource = null;
+  }
+
+  const url = `${session.base_url}/events?token=${encodeURIComponent(session.token)}`;
+  sseSource = new EventSource(url);
+
+  sseSource.addEventListener("state_update", (event: MessageEvent) => {
+    try {
+      const state = JSON.parse(event.data as string) as unknown;
+      for (const handler of sseHandlers) {
+        try {
+          handler(state);
+        } catch (e) {
+          console.error("SSE handler error", e);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to parse SSE state update", e);
+    }
+  });
+
+  sseSource.onerror = () => {
+    console.debug("SSE connection error, will retry on next ensureDaemonAwake");
+    sseSource?.close();
+    sseSource = null;
+  };
+}
+
+export function stopSse(): void {
+  if (sseSource) {
+    sseSource.close();
+    sseSource = null;
+  }
 }

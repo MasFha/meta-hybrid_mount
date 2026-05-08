@@ -14,6 +14,7 @@ import { configStore } from "./lib/stores/configStore";
 import { sysStore } from "./lib/stores/sysStore";
 import { kasumiStore } from "./lib/stores/kasumiStore";
 import { API } from "./lib/api";
+import { onSseStateUpdate, stopSse } from "./lib/api/core/bridge";
 import TopBar from "./components/TopBar";
 import NavBar from "./components/NavBar";
 import Toast from "./components/Toast";
@@ -157,6 +158,7 @@ export default function App() {
 
   onCleanup(() => {
     disposed = true;
+    stopSse();
     if (preloadTimer !== undefined) {
       window.clearTimeout(preloadTimer);
     }
@@ -192,16 +194,15 @@ export default function App() {
     try {
       await uiStore.init();
       await API.wakeDaemon();
-      const statusLoad = sysStore.ensureStatusLoaded();
-      const kasumiLoad = kasumiStore.ensureStatusLoaded();
-      void configStore.loadConfig();
-      void sysStore.ensureVersionLoaded();
-      setInitialDataReady(true);
-
-      void Promise.allSettled([statusLoad, kasumiLoad]).then(() => {
-        if (disposed) return;
-        startRoutePreload();
+      await API.init().then((payload) => {
+        sysStore.loadFromInit(payload);
+        kasumiStore.loadFromInit(payload);
+        configStore.loadFromInit(payload);
       });
+      setInitialDataReady(true);
+      startRoutePreload();
+      onSseStateUpdate((state) => sysStore.handleSseUpdate(state));
+      onSseStateUpdate((state) => kasumiStore.handleSseUpdate(state));
     } catch (e) {
       console.error("App initialization failed", e);
       uiStore.showToast(

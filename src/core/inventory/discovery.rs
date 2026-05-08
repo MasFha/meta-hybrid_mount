@@ -33,19 +33,18 @@ pub fn scan(source_dir: &Path, cfg: &config::Config) -> Result<Vec<Module>> {
         return Ok(Vec::new());
     }
 
-    let dir_entries = fs::read_dir(source_dir)?.collect::<std::io::Result<Vec<_>>>()?;
-
     let mut modules = Vec::new();
     let mut skipped_reserved = 0usize;
     let mut skipped_blocked = 0usize;
 
-    for entry in dir_entries {
-        let path = entry.path();
-
-        if !path.is_dir() {
+    for entry in fs::read_dir(source_dir)? {
+        let entry = entry?;
+        let file_type = entry.file_type()?;
+        if !file_type.is_dir() {
             continue;
         }
 
+        let path = entry.path();
         let id = entry.file_name().to_string_lossy().into_owned();
 
         if inventory::is_reserved_module_dir(&id) {

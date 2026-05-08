@@ -181,6 +181,35 @@ export const MockAPI: AppAPI = {
   async wakeDaemon(): Promise<void> {
     await delay(20);
   },
+  async init() {
+    await delay(200);
+    return {
+      status: {
+        storage_mode: "tmpfs",
+        mount_point: "/data/adb/hybrid-mount/mnt",
+        overlay_modules: ["module_a", "module_b"],
+        magic_modules: ["module_c"],
+        kasumi_modules: [],
+        active_mounts: ["/system", "/vendor"],
+      },
+      config: { ...DEFAULT_CONFIG },
+      version: APP_VERSION,
+      kasumi_status: {
+        status: "enabled",
+        available: true,
+        protocol_version: 1,
+        feature_bits: 0,
+        feature_names: [],
+        hooks: [],
+        rule_count: 0,
+        user_hide_rule_count: 0,
+        mirror_path: "/dev/kasumi_mirror",
+        lkm: { loaded: true, autoload: true, kmi_override: "" },
+        config: { ...DEFAULT_CONFIG.kasumi },
+        runtime: { snapshot: {}, kasumi_modules: [], active_mounts: [] },
+      },
+    };
+  },
   async loadConfig(): Promise<AppConfig> {
     await delay(300);
     return { ...DEFAULT_CONFIG };

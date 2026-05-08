@@ -9,6 +9,7 @@ import { patchConfigFile } from "../repos/configRepo";
 import { buildKasumiStatusFromPayload } from "../codec/runtimeCodec";
 import { AppError } from "../core/error";
 import { isRecord, isString } from "../core/guards";
+import { shellEscapeDoubleQuoted } from "../core/shell";
 
 async function applyKasumiRuntimeConfig(): Promise<void> {
   await runHybridMountJson("kasumi apply-config-runtime", PATHS.BINARY);
@@ -144,10 +145,7 @@ export async function addKasumiMapsRule(rule: {
   spoofed_dev: number;
   spoofed_pathname: string;
 }): Promise<void> {
-  await runDaemonCommand(
-    { type: "api-kasumi-maps-add", rule },
-    PATHS.BINARY,
-  );
+  await runDaemonCommand({ type: "api-kasumi-maps-add", rule }, PATHS.BINARY);
 }
 
 export async function clearKasumiMapsRules(): Promise<void> {

@@ -17,6 +17,37 @@ describe("scanModules", () => {
     mockReadModuleProp.mockReset();
   });
 
+  it("uses inline module metadata from the daemon without per-module shell reads", async () => {
+    mockRunHybridMountJson.mockResolvedValue([
+      {
+        id: "hybrid_mount",
+        name: "Hybrid Mount",
+        version: "v3.6.1",
+        author: "Hybrid Mount Developers",
+        description: "Waiting for daemon...",
+        mode: "overlay",
+        is_mounted: true,
+        enabled: true,
+        source_path: "/data/adb/modules/hybrid_mount",
+        rules: {
+          default_mode: "overlay",
+          paths: {},
+        },
+      },
+    ]);
+
+    await expect(scanModules()).resolves.toMatchObject([
+      {
+        id: "hybrid_mount",
+        name: "Hybrid Mount",
+        version: "v3.6.1",
+        author: "Hybrid Mount Developers",
+        description: "Waiting for daemon...",
+      },
+    ]);
+    expect(mockReadModuleProp).not.toHaveBeenCalled();
+  });
+
   it("parses metadata from the real module.prop template shape", async () => {
     mockRunHybridMountJson.mockResolvedValue([
       {

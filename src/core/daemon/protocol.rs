@@ -29,6 +29,7 @@ pub enum DaemonCommand {
     Ping,
     WebuiStart,
     Shutdown,
+    Init,
     Status,
     ApiStorage,
     ApiMountStats,
@@ -115,6 +116,9 @@ pub enum DaemonCommand {
     KasumiRuleRemoveDir {
         target_base: PathBuf,
         source_dir: PathBuf,
+    },
+    Batch {
+        commands: Vec<DaemonCommand>,
     },
 }
 

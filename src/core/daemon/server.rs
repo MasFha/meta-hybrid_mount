@@ -76,6 +76,7 @@ pub fn serve(_config: Config) -> Result<()> {
     let shutdown = install_shutdown_flag()?;
 
     let active_webui_connections = Arc::new(AtomicUsize::new(0));
+    let sse_clients: Arc<Mutex<Vec<TcpStream>>> = Arc::new(Mutex::new(Vec::new()));
 
     crate::scoped_log!(
         info,
@@ -88,7 +89,9 @@ pub fn serve(_config: Config) -> Result<()> {
     while !shutdown.load(Ordering::Relaxed) {
         match listener.accept() {
             Ok((mut stream, _addr)) => {
-                if let Err(err) = handle_stream(&state, &shutdown, &webui_session, &mut stream) {
+                if let Err(err) =
+                    handle_stream(&state, &shutdown, &webui_session, &sse_clients, &mut stream)
+                {
                     crate::scoped_log!(warn, "daemon", "request failed: error={:#}", err);
                     let payload = DaemonResponse::error(format!("{err:#}"));
                     let _ = write_response(&mut stream, &payload);
@@ -117,12 +120,13 @@ pub fn serve(_config: Config) -> Result<()> {
                 let state = state.clone();
                 let shutdown = shutdown.clone();
                 let session = webui_session.clone();
+                let thread_sse = sse_clients.clone();
                 let _ = std::thread::Builder::new()
                     .name("hybrid-mount-webui-rpc".to_string())
                     .spawn(move || {
                         let _connection_guard = connection_guard;
                         if let Err(err) =
-                            handle_http_connection(&state, &shutdown, &session, stream)
+                            handle_http_connection(&state, &shutdown, &session, thread_sse, stream)
                         {
                             crate::scoped_log!(
                                 warn,
@@ -154,6 +158,7 @@ fn handle_stream(
     state: &Arc<Mutex<RuntimeState>>,
     shutdown: &Arc<AtomicBool>,
     webui: &WebuiHttpSession,
+    sse_clients: &Arc<Mutex<Vec<TcpStream>>>,
     stream: &mut UnixStream,
 ) -> Result<()> {
     let mut reader = BufReader::new(
@@ -181,6 +186,7 @@ fn handle_stream(
         state,
         shutdown,
         webui,
+        sse_clients,
         request.command,
     )?;
     write_response(stream, &DaemonResponse::success(payload))
@@ -327,6 +333,7 @@ fn handle_http_connection(
     state: &Arc<Mutex<RuntimeState>>,
     shutdown: &Arc<AtomicBool>,
     webui: &WebuiHttpSession,
+    sse_clients: Arc<Mutex<Vec<TcpStream>>>,
     mut stream: TcpStream,
 ) -> Result<()> {
     stream
@@ -360,7 +367,7 @@ fn handle_http_connection(
                 return Err(err);
             }
         };
-        if handle_http_request(state, shutdown, webui, &mut stream, request)?
+        if handle_http_request(state, shutdown, webui, &sse_clients, &mut stream, request)?
             == ConnectionAction::Close
         {
             break;
@@ -453,6 +460,7 @@ fn handle_http_request(
     state: &Arc<Mutex<RuntimeState>>,
     shutdown: &Arc<AtomicBool>,
     webui: &WebuiHttpSession,
+    sse_clients: &Arc<Mutex<Vec<TcpStream>>>,
     stream: &mut TcpStream,
     request: WebuiHttpRequest,
 ) -> Result<ConnectionAction> {
@@ -466,6 +474,16 @@ fn handle_http_request(
     if request.request_line.starts_with("OPTIONS ") {
         write_http_response(stream, 204, "No Content", b"", connection_action)?;
         return Ok(ConnectionAction::Close);
+    }
+    if request.request_line.starts_with("GET /events ") {
+        return handle_sse_endpoint(
+            state,
+            shutdown,
+            webui,
+            sse_clients,
+            stream,
+            &request.request_line,
+        );
     }
     if !request.request_line.starts_with("POST /rpc ") {
         write_http_json(
@@ -501,6 +519,7 @@ fn handle_http_request(
         state,
         shutdown,
         webui,
+        sse_clients,
         request.command,
     ) {
         Ok(payload) => DaemonResponse::success(payload),
@@ -558,6 +577,87 @@ fn write_http_response(
     stream
         .flush()
         .context("Failed to flush WebUI HTTP response")
+}
+
+fn parse_query_param<'a>(request_line: &'a str, key: &str) -> Option<&'a str> {
+    let path = request_line.split_whitespace().nth(1)?;
+    let query = path.split('?').nth(1)?;
+    for pair in query.split('&') {
+        let (k, v) = pair.split_once('=')?;
+        if k == key {
+            return Some(v);
+        }
+    }
+    None
+}
+
+fn handle_sse_endpoint(
+    state: &Arc<Mutex<RuntimeState>>,
+    shutdown: &Arc<AtomicBool>,
+    webui: &WebuiHttpSession,
+    sse_clients: &Arc<Mutex<Vec<TcpStream>>>,
+    stream: &mut TcpStream,
+    request_line: &str,
+) -> Result<ConnectionAction> {
+    let token = parse_query_param(request_line, "token").unwrap_or("");
+    if token != webui.token {
+        write_http_json(
+            stream,
+            401,
+            "Unauthorized",
+            &DaemonResponse::error("invalid SSE token"),
+            ConnectionAction::Close,
+        )?;
+        return Ok(ConnectionAction::Close);
+    }
+
+    write!(
+        stream,
+        "HTTP/1.1 200 OK\r\n\
+         Content-Type: text/event-stream\r\n\
+         Cache-Control: no-cache\r\n\
+         Connection: keep-alive\r\n\
+         Access-Control-Allow-Origin: *\r\n\r\n"
+    )
+    .context("Failed to write SSE response header")?;
+    stream.flush().context("Failed to flush SSE headers")?;
+
+    // Send initial event
+    let initial = {
+        let mut guard = state.lock().expect("daemon state poisoned");
+        serde_json::to_string(guard.status_value()?).unwrap_or_default()
+    };
+    write!(stream, "event: state_update\ndata: {initial}\n\n")
+        .context("Failed to write SSE initial event")?;
+    stream
+        .flush()
+        .context("Failed to flush SSE initial event")?;
+
+    let sse_stream = stream
+        .try_clone()
+        .context("Failed to clone stream for SSE broadcast")?;
+    {
+        let mut clients = sse_clients.lock().expect("sse_clients poisoned");
+        clients.push(sse_stream);
+    }
+
+    // Block until shutdown or client disconnect
+    stream
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .context("Failed to set SSE read timeout")?;
+    let mut buf = [0u8; 1];
+    while !shutdown.load(Ordering::Relaxed) {
+        match stream.read(&mut buf) {
+            Ok(0) => break,
+            Err(ref e) if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {
+                std::thread::sleep(Duration::from_secs(1));
+            }
+            Err(_) => break,
+            _ => {}
+        }
+    }
+
+    Ok(ConnectionAction::Close)
 }
 
 fn patch_config_file(config_path: &Path, patch: Value) -> Result<Config> {
@@ -628,61 +728,6 @@ fn reboot_device() -> Result<()> {
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parse_content_length_accepts_valid_value() {
-        assert_eq!(parse_content_length("128").unwrap(), 128);
-    }
-
-    #[test]
-    fn parse_content_length_rejects_invalid_value() {
-        let err = parse_content_length("nope").unwrap_err();
-        assert_eq!(
-            err.downcast_ref::<WebuiHttpRequestReadError>(),
-            Some(&WebuiHttpRequestReadError::InvalidContentLength)
-        );
-    }
-
-    #[test]
-    fn parse_content_length_rejects_oversized_value() {
-        let err = parse_content_length(&(MAX_WEBUI_HTTP_BODY_BYTES + 1).to_string()).unwrap_err();
-        assert_eq!(
-            err.downcast_ref::<WebuiHttpRequestReadError>(),
-            Some(&WebuiHttpRequestReadError::RequestBodyTooLarge)
-        );
-    }
-
-    #[test]
-    fn allocate_request_body_rejects_oversized_value() {
-        let err = allocate_request_body(MAX_WEBUI_HTTP_BODY_BYTES + 1).unwrap_err();
-        assert_eq!(
-            err.downcast_ref::<WebuiHttpRequestReadError>(),
-            Some(&WebuiHttpRequestReadError::RequestBodyTooLarge)
-        );
-    }
-
-    #[test]
-    fn connection_guard_tracks_active_connections() {
-        let active_connections = Arc::new(AtomicUsize::new(0));
-        {
-            let _first = ActiveWebuiConnectionGuard::try_acquire(&active_connections).unwrap();
-            assert_eq!(active_connections.load(Ordering::Relaxed), 1);
-            let _second = ActiveWebuiConnectionGuard::try_acquire(&active_connections).unwrap();
-            assert_eq!(active_connections.load(Ordering::Relaxed), 2);
-        }
-        assert_eq!(active_connections.load(Ordering::Relaxed), 0);
-    }
-
-    #[test]
-    fn connection_guard_enforces_connection_limit() {
-        let active_connections = Arc::new(AtomicUsize::new(MAX_WEBUI_CONNECTIONS));
-        assert!(ActiveWebuiConnectionGuard::try_acquire(&active_connections).is_none());
-    }
-}
-
 fn add_kasumi_maps_config_rule(config_path: &Path, rule: Value) -> Result<Config> {
     let mut config = load_runtime_config(config_path)?;
     let rule: crate::conf::schema::KasumiMapsRuleConfig =
@@ -702,18 +747,50 @@ fn dispatch_command(
     state: &Arc<Mutex<RuntimeState>>,
     shutdown: &Arc<AtomicBool>,
     webui: &WebuiHttpSession,
+    sse_clients: &Arc<Mutex<Vec<TcpStream>>>,
     command: DaemonCommand,
 ) -> Result<Value> {
     match command {
         DaemonCommand::Ping => to_value(&json!({ "status": "ok" })),
         DaemonCommand::WebuiStart => Ok(webui.session_payload()),
+        DaemonCommand::Init => {
+            let mut guard = state.lock().expect("daemon state poisoned");
+            let status_value = guard.status_value()?.clone();
+            let config_value = to_value(config)?;
+            let version_value = to_value(&api::build_version_payload())?;
+            let kasumi_info = kasumi_mount::collect_runtime_info(config);
+            let kasumi_status_value = to_value(&json!({
+                "status": kasumi_info.status,
+                "available": kasumi_info.available,
+                "protocol_version": kasumi_info.protocol_version,
+                "feature_bits": kasumi_info.feature_bits,
+                "feature_names": kasumi_info.feature_names,
+                "hooks": kasumi_info.hooks,
+                "rule_count": kasumi_info.rule_count,
+                "user_hide_rule_count": kasumi_info.user_hide_rule_count,
+                "mirror_path": kasumi_info.mirror_path,
+                "lkm": api::build_lkm_payload(config),
+                "config": config.kasumi.clone(),
+                "runtime": {
+                    "snapshot": guard.kasumi,
+                    "kasumi_modules": &guard.kasumi_modules,
+                    "active_mounts": &guard.active_mounts,
+                }
+            }))?;
+            to_value(&json!({
+                "status": status_value,
+                "config": config_value,
+                "version": version_value,
+                "kasumi_status": kasumi_status_value,
+            }))
+        }
         DaemonCommand::Shutdown => {
             shutdown.store(true, Ordering::Relaxed);
             to_value(&json!({ "shutdown": true }))
         }
         DaemonCommand::Status => {
-            let guard = state.lock().expect("daemon state poisoned");
-            to_value(&*guard)
+            let mut guard = state.lock().expect("daemon state poisoned");
+            Ok(guard.status_value()?.clone())
         }
         DaemonCommand::ApiStorage => {
             let guard = state.lock().expect("daemon state poisoned");
@@ -738,7 +815,12 @@ fn dispatch_command(
             let config: Config =
                 serde_json::from_value(payload).context("Failed to decode config payload")?;
             config.save_to_file(config_path)?;
-            refresh_and_to_value(&config, state, json!({ "saved": true, "config": &config }))
+            refresh_and_to_value(
+                &config,
+                state,
+                sse_clients,
+                json!({ "saved": true, "config": &config }),
+            )
         }
         DaemonCommand::ApiConfigPatch {
             patch,
@@ -755,6 +837,7 @@ fn dispatch_command(
             refresh_and_to_value(
                 &config,
                 state,
+                sse_clients,
                 json!({
                     "saved": true,
                     "applied": applied,
@@ -767,7 +850,12 @@ fn dispatch_command(
             config.save_to_file(config_path)?;
             kasumi_mount::apply_runtime_config(&config)?;
             kasumi::invalidate_status_cache();
-            refresh_and_to_value(&config, state, json!({ "saved": true, "config": &config }))
+            refresh_and_to_value(
+                &config,
+                state,
+                sse_clients,
+                json!({ "saved": true, "config": &config }),
+            )
         }
         DaemonCommand::ApiModulesList { path } => {
             let snapshot = state.lock().expect("daemon state poisoned").clone();
@@ -780,7 +868,7 @@ fn dispatch_command(
         DaemonCommand::ApiModulesApply { modules } => {
             let payload = api::apply_modules_payload(config_path, &modules)?;
             let config = load_runtime_config(config_path)?;
-            refresh_and_to_value(&config, state, payload)
+            refresh_and_to_value(&config, state, sse_clients, payload)
         }
         DaemonCommand::ApiLkm => to_value(&api::build_lkm_payload(config)),
         DaemonCommand::ApiHooks => {
@@ -804,6 +892,7 @@ fn dispatch_command(
             refresh_and_to_value(
                 &updated,
                 state,
+                sse_clients,
                 json!({
                     "saved": true,
                     "config": &updated,
@@ -820,6 +909,7 @@ fn dispatch_command(
             refresh_and_to_value(
                 &updated,
                 state,
+                sse_clients,
                 json!({
                     "saved": true,
                     "config": &updated,
@@ -866,7 +956,7 @@ fn dispatch_command(
         DaemonCommand::KasumiApplyConfigRuntime => {
             let applied = kasumi_mount::apply_runtime_config(config)?;
             kasumi::invalidate_status_cache();
-            refresh_and_to_value(config, state, json!({ "applied": applied }))
+            refresh_and_to_value(config, state, sse_clients, json!({ "applied": applied }))
         }
         DaemonCommand::HideList => to_value(&user_hide_rules::load_user_hide_rules()?),
         DaemonCommand::HideAdd { path } => {
@@ -874,11 +964,21 @@ fn dispatch_command(
             if added && kasumi_mount::can_operate(config) {
                 kasumi::hide_path(&path)?;
             }
-            refresh_and_to_value(config, state, json!({ "added": added, "path": path }))
+            refresh_and_to_value(
+                config,
+                state,
+                sse_clients,
+                json!({ "added": added, "path": path }),
+            )
         }
         DaemonCommand::HideRemove { path } => {
             let removed = user_hide_rules::remove_user_hide_rule(&path)?;
-            refresh_and_to_value(config, state, json!({ "removed": removed, "path": path }))
+            refresh_and_to_value(
+                config,
+                state,
+                sse_clients,
+                json!({ "removed": removed, "path": path }),
+            )
         }
         DaemonCommand::HideApply => {
             kasumi_mount::require_live(config, "apply user hide rules")?;
@@ -886,6 +986,7 @@ fn dispatch_command(
             refresh_and_to_value(
                 config,
                 state,
+                sse_clients,
                 json!({ "applied": applied, "failed": failed }),
             )
         }
@@ -893,22 +994,38 @@ fn dispatch_command(
         DaemonCommand::LkmLoad => {
             lkm::load(&config.kasumi)?;
             kasumi::invalidate_status_cache();
-            refresh_and_to_value(config, state, json!({ "message": "Kasumi LKM loaded." }))
+            refresh_and_to_value(
+                config,
+                state,
+                sse_clients,
+                json!({ "message": "Kasumi LKM loaded." }),
+            )
         }
         DaemonCommand::LkmUnload => {
             lkm::unload(&config.kasumi)?;
             kasumi::invalidate_status_cache();
-            refresh_and_to_value(config, state, json!({ "message": "Kasumi LKM unloaded." }))
+            refresh_and_to_value(
+                config,
+                state,
+                sse_clients,
+                json!({ "message": "Kasumi LKM unloaded." }),
+            )
         }
         DaemonCommand::KasumiClear => {
             kasumi::clear_rules()?;
-            refresh_and_to_value(config, state, json!({ "message": "Kasumi rules cleared." }))
+            refresh_and_to_value(
+                config,
+                state,
+                sse_clients,
+                json!({ "message": "Kasumi rules cleared." }),
+            )
         }
         DaemonCommand::KasumiReleaseConnection => {
             kasumi::release_connection();
             refresh_and_to_value(
                 config,
                 state,
+                sse_clients,
                 json!({ "message": "Released cached Kasumi client connection." }),
             )
         }
@@ -917,6 +1034,7 @@ fn dispatch_command(
             refresh_and_to_value(
                 config,
                 state,
+                sse_clients,
                 json!({ "message": "Invalidated cached Kasumi status." }),
             )
         }
@@ -925,6 +1043,7 @@ fn dispatch_command(
             refresh_and_to_value(
                 config,
                 state,
+                sse_clients,
                 json!({ "message": "Kasumi mount ordering fixed." }),
             )
         }
@@ -933,6 +1052,7 @@ fn dispatch_command(
             refresh_and_to_value(
                 config,
                 state,
+                sse_clients,
                 json!({ "message": "Kasumi global uname restored." }),
             )
         }
@@ -946,6 +1066,7 @@ fn dispatch_command(
             refresh_and_to_value(
                 config,
                 state,
+                sse_clients,
                 json!({
                     "message": "Kasumi uname applied.",
                     "mode": display_uname_mode(mode),
@@ -965,6 +1086,7 @@ fn dispatch_command(
             refresh_and_to_value(
                 config,
                 state,
+                sse_clients,
                 json!({
                     "message": "Kasumi uname cleared.",
                     "mode": display_uname_mode(mode),
@@ -981,6 +1103,7 @@ fn dispatch_command(
             refresh_and_to_value(
                 config,
                 state,
+                sse_clients,
                 json!({
                     "message": "Kasumi ADD rule applied.",
                     "target": target,
@@ -994,6 +1117,7 @@ fn dispatch_command(
             refresh_and_to_value(
                 config,
                 state,
+                sse_clients,
                 json!({
                     "message": "Kasumi MERGE rule applied.",
                     "target": target,
@@ -1006,6 +1130,7 @@ fn dispatch_command(
             refresh_and_to_value(
                 config,
                 state,
+                sse_clients,
                 json!({
                     "message": "Kasumi HIDE rule applied.",
                     "path": path,
@@ -1017,6 +1142,7 @@ fn dispatch_command(
             refresh_and_to_value(
                 config,
                 state,
+                sse_clients,
                 json!({
                     "message": "Kasumi rule deleted.",
                     "path": path,
@@ -1031,6 +1157,7 @@ fn dispatch_command(
             refresh_and_to_value(
                 config,
                 state,
+                sse_clients,
                 json!({
                     "message": "Kasumi directory rules applied.",
                     "target_base": target_base,
@@ -1046,12 +1173,32 @@ fn dispatch_command(
             refresh_and_to_value(
                 config,
                 state,
+                sse_clients,
                 json!({
                     "message": "Kasumi directory rules removed.",
                     "target_base": target_base,
                     "source_dir": source_dir,
                 }),
             )
+        }
+        DaemonCommand::Batch { commands } => {
+            let mut results: Vec<Value> = Vec::with_capacity(commands.len());
+            for cmd in commands {
+                let result = match dispatch_command(
+                    config,
+                    config_path,
+                    state,
+                    shutdown,
+                    webui,
+                    sse_clients,
+                    cmd,
+                ) {
+                    Ok(value) => json!({ "ok": true, "data": value }),
+                    Err(err) => json!({ "ok": false, "error": format!("{err}") }),
+                };
+                results.push(result);
+            }
+            to_value(&json!({ "results": results }))
         }
     }
 }
@@ -1147,17 +1294,61 @@ fn write_pid_file() -> Result<()> {
 fn refresh_and_to_value<T: Serialize>(
     config: &Config,
     state: &Arc<Mutex<RuntimeState>>,
+    sse_clients: &Arc<Mutex<Vec<TcpStream>>>,
     payload: T,
 ) -> Result<Value> {
-    refresh_runtime_snapshot(config, state)?;
+    refresh_runtime_snapshot(config, state, sse_clients)?;
     to_value(&payload)
 }
 
-fn refresh_runtime_snapshot(config: &Config, state: &Arc<Mutex<RuntimeState>>) -> Result<()> {
+fn refresh_runtime_snapshot(
+    config: &Config,
+    state: &Arc<Mutex<RuntimeState>>,
+    sse_clients: &Arc<Mutex<Vec<TcpStream>>>,
+) -> Result<()> {
     let mut guard = state.lock().expect("daemon state poisoned");
     guard.kasumi = kasumi_mount::collect_runtime_info(config);
     guard.set_daemon_state(true, defs::SOCKET_FILE);
-    guard.save()
+    guard
+        .status_value()
+        .map_err(|e| anyhow::anyhow!("Failed to cache status value: {e}"))?;
+    guard.save()?;
+    drop(guard);
+    broadcast_sse_event(state, sse_clients, "state_update");
+    Ok(())
+}
+
+fn broadcast_sse_event(
+    state: &Arc<Mutex<RuntimeState>>,
+    sse_clients: &Arc<Mutex<Vec<TcpStream>>>,
+    event: &str,
+) {
+    let json = {
+        let mut guard = match state.lock() {
+            Ok(g) => g,
+            Err(_) => return,
+        };
+        match guard.status_value() {
+            Ok(v) => v.clone(),
+            Err(_) => return,
+        }
+    };
+    let body = match serde_json::to_string(&json) {
+        Ok(s) => s,
+        Err(_) => return,
+    };
+    let payload = format!("event: {event}\ndata: {body}\n\n");
+
+    let mut clients = match sse_clients.lock() {
+        Ok(c) => c,
+        Err(_) => return,
+    };
+    clients.retain_mut(|client| {
+        client
+            .write_all(payload.as_bytes())
+            .and_then(|_| client.flush())
+            .is_ok()
+    });
 }
 
 fn to_value<T: Serialize>(payload: &T) -> Result<Value> {
@@ -1244,5 +1435,60 @@ impl Drop for DaemonRuntimeGuard {
         }
         let _ = fs::remove_file(defs::PID_FILE);
         let _ = fs::remove_file(defs::SOCKET_FILE);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_content_length_accepts_valid_value() {
+        assert_eq!(parse_content_length("128").unwrap(), 128);
+    }
+
+    #[test]
+    fn parse_content_length_rejects_invalid_value() {
+        let err = parse_content_length("nope").unwrap_err();
+        assert_eq!(
+            err.downcast_ref::<WebuiHttpRequestReadError>(),
+            Some(&WebuiHttpRequestReadError::InvalidContentLength)
+        );
+    }
+
+    #[test]
+    fn parse_content_length_rejects_oversized_value() {
+        let err = parse_content_length(&(MAX_WEBUI_HTTP_BODY_BYTES + 1).to_string()).unwrap_err();
+        assert_eq!(
+            err.downcast_ref::<WebuiHttpRequestReadError>(),
+            Some(&WebuiHttpRequestReadError::RequestBodyTooLarge)
+        );
+    }
+
+    #[test]
+    fn allocate_request_body_rejects_oversized_value() {
+        let err = allocate_request_body(MAX_WEBUI_HTTP_BODY_BYTES + 1).unwrap_err();
+        assert_eq!(
+            err.downcast_ref::<WebuiHttpRequestReadError>(),
+            Some(&WebuiHttpRequestReadError::RequestBodyTooLarge)
+        );
+    }
+
+    #[test]
+    fn connection_guard_tracks_active_connections() {
+        let active_connections = Arc::new(AtomicUsize::new(0));
+        {
+            let _first = ActiveWebuiConnectionGuard::try_acquire(&active_connections).unwrap();
+            assert_eq!(active_connections.load(Ordering::Relaxed), 1);
+            let _second = ActiveWebuiConnectionGuard::try_acquire(&active_connections).unwrap();
+            assert_eq!(active_connections.load(Ordering::Relaxed), 2);
+        }
+        assert_eq!(active_connections.load(Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn connection_guard_enforces_connection_limit() {
+        let active_connections = Arc::new(AtomicUsize::new(MAX_WEBUI_CONNECTIONS));
+        assert!(ActiveWebuiConnectionGuard::try_acquire(&active_connections).is_none());
     }
 }

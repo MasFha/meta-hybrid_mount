@@ -1,6 +1,9 @@
 import { createSignal, createRoot } from "solid-js";
 import type { KasumiStatus } from "../types";
+import type { InitPayload } from "../api/contracts";
 import { API } from "../api";
+import { DEFAULT_CONFIG } from "../constants";
+import { buildKasumiStatusFromPayload } from "../api/codec/runtimeCodec";
 import { uiStore } from "./uiStore";
 
 const STATUS_CACHE_TTL_MS = 3000;
@@ -14,6 +17,21 @@ const createKasumiStore = () => {
 
   function hasFreshStatus() {
     return hasLoaded && Date.now() - lastLoadedAt < STATUS_CACHE_TTL_MS;
+  }
+
+  function loadFromInit(payload: InitPayload) {
+    if (payload.kasumi_status != null) {
+      const s = buildKasumiStatusFromPayload(
+        payload.kasumi_status,
+        DEFAULT_CONFIG.kasumi,
+        {},
+      );
+      if (s) {
+        setStatus(s);
+        hasLoaded = true;
+        lastLoadedAt = Date.now();
+      }
+    }
   }
 
   async function loadStatus(showError = true, force = false) {
@@ -62,6 +80,25 @@ const createKasumiStore = () => {
     lastLoadedAt = Date.now();
   }
 
+  function handleSseUpdate(state: unknown) {
+    const current = status();
+    if (!current) return;
+    const s = state as Record<string, unknown> | null;
+    if (!s || typeof s !== "object") return;
+    const kasumi = s.kasumi as Record<string, unknown> | null;
+    const kasumiModules = Array.isArray(s.kasumi_modules) ? s.kasumi_modules as string[] : [];
+    setStatus({
+      ...current,
+      runtime: {
+        ...current.runtime,
+        snapshot: kasumi ?? current.runtime?.snapshot ?? {},
+        kasumi_modules: kasumiModules,
+      },
+    });
+    hasLoaded = true;
+    lastLoadedAt = Date.now();
+  }
+
   return {
     get status() {
       return status();
@@ -73,9 +110,11 @@ const createKasumiStore = () => {
       return loading();
     },
     ensureStatusLoaded,
+    loadFromInit,
     refreshStatus: (showError = true, force = true) =>
       loadStatus(showError, force),
     setEnabledOptimistic,
+    handleSseUpdate,
   };
 };
 

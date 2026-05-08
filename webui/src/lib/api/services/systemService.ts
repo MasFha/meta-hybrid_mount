@@ -1,14 +1,24 @@
 import { PATHS } from "../../constants";
 import type { StorageStatus, SystemInfo } from "../../types";
+import type { InitPayload } from "../contracts";
 import {
   defaultVersion,
   hasExecBridge,
+  runDaemonCommand,
   runHybridMountJson,
 } from "../core/bridge";
 import { isBoolean, isRecord, isString, isStringArray } from "../core/guards";
 import { shellEscapeDoubleQuoted } from "../core/shell";
 import { buildModeStats, buildMountedCount } from "../codec/runtimeCodec";
 import { loadRuntimeState } from "../repos/runtimeRepo";
+
+export async function init(): Promise<InitPayload> {
+  const payload = await runDaemonCommand({ type: "init" }, PATHS.BINARY);
+  if (!isRecord(payload)) {
+    throw new Error("init payload is invalid");
+  }
+  return payload as unknown as InitPayload;
+}
 
 export async function getStorageUsage(): Promise<StorageStatus> {
   try {

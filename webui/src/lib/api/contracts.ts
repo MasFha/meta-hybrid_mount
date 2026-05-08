@@ -9,8 +9,16 @@ import type {
   SystemInfo,
 } from "../types";
 
+export interface InitPayload {
+  status: unknown;
+  config: unknown;
+  version: string;
+  kasumi_status: unknown;
+}
+
 export interface AppAPI {
   wakeDaemon: () => Promise<void>;
+  init: () => Promise<InitPayload>;
   loadConfig: () => Promise<AppConfig>;
   saveConfig: (config: AppConfig) => Promise<void>;
   resetConfig: () => Promise<void>;

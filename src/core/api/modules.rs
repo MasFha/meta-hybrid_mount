@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeSet, HashSet},
     fs,
     io::{self, Read},
     path::{Path, PathBuf},
@@ -32,6 +32,10 @@ use crate::{
 #[derive(Debug, Clone, Serialize)]
 pub struct ModuleListEntry {
     pub id: String,
+    pub name: String,
+    pub version: String,
+    pub author: String,
+    pub description: String,
     pub mode: MountMode,
     pub is_mounted: bool,
     pub enabled: bool,
@@ -91,6 +95,7 @@ fn build_scanned_modules_payload(
         return Ok(Vec::new());
     }
 
+    let runtime_index = RuntimeModuleIndex::new(state);
     let mut modules = Vec::new();
     for entry in fs::read_dir(source_dir)
         .with_context(|| format!("failed to read module directory {}", source_dir.display()))?
@@ -119,11 +124,16 @@ fn build_scanned_modules_payload(
 
         let rules = inventory::load_module_rules(config, &id);
         let enabled = !inventory::has_mount_block_marker(&module_path);
-        let runtime_mode = enabled.then(|| module_runtime_mode(&id, state)).flatten();
+        let runtime_mode = enabled.then(|| runtime_index.mode(&id)).flatten();
         let mode = runtime_mode.unwrap_or(rules.default_mode);
+        let metadata = read_module_metadata(&module_path, &id);
 
         modules.push(ModuleListEntry {
             id,
+            name: metadata.name,
+            version: metadata.version,
+            author: metadata.author,
+            description: metadata.description,
             mode,
             is_mounted: runtime_mode.is_some(),
             enabled,
@@ -137,6 +147,7 @@ fn build_scanned_modules_payload(
 }
 
 fn build_runtime_modules_payload(config: &Config, state: &RuntimeState) -> Vec<ModuleListEntry> {
+    let runtime_index = RuntimeModuleIndex::new(state);
     let mut ids = BTreeSet::new();
     ids.extend(state.overlay_modules.iter().cloned());
     ids.extend(state.magic_modules.iter().cloned());
@@ -150,12 +161,17 @@ fn build_runtime_modules_payload(config: &Config, state: &RuntimeState) -> Vec<M
         .map(|id| {
             let source_path = config.moduledir.join(&id);
             let rules = inventory::load_module_rules(config, &id);
-            let runtime_mode = module_runtime_mode(&id, state);
+            let runtime_mode = runtime_index.mode(&id);
             let mode = runtime_mode.unwrap_or(rules.default_mode);
-            let enabled = !state.skip_mount_modules.iter().any(|item| item == &id);
+            let enabled = runtime_index.enabled(&id);
+            let metadata = read_module_metadata(&source_path, &id);
 
             ModuleListEntry {
                 id,
+                name: metadata.name,
+                version: metadata.version,
+                author: metadata.author,
+                description: metadata.description,
                 mode,
                 is_mounted: runtime_mode.is_some(),
                 enabled,
@@ -215,17 +231,43 @@ pub fn build_version_payload() -> VersionPayload {
     }
 }
 
-fn module_runtime_mode(module_id: &str, state: &RuntimeState) -> Option<MountMode> {
-    if state.overlay_modules.iter().any(|id| id == module_id) {
-        return Some(MountMode::Overlay);
+struct RuntimeModuleIndex<'a> {
+    overlay: HashSet<&'a str>,
+    magic: HashSet<&'a str>,
+    kasumi: HashSet<&'a str>,
+    skipped: HashSet<&'a str>,
+}
+
+impl<'a> RuntimeModuleIndex<'a> {
+    fn new(state: &'a RuntimeState) -> Self {
+        Self {
+            overlay: state.overlay_modules.iter().map(String::as_str).collect(),
+            magic: state.magic_modules.iter().map(String::as_str).collect(),
+            kasumi: state.kasumi_modules.iter().map(String::as_str).collect(),
+            skipped: state
+                .skip_mount_modules
+                .iter()
+                .map(String::as_str)
+                .collect(),
+        }
     }
-    if state.magic_modules.iter().any(|id| id == module_id) {
-        return Some(MountMode::Magic);
+
+    fn mode(&self, module_id: &str) -> Option<MountMode> {
+        if self.overlay.contains(module_id) {
+            return Some(MountMode::Overlay);
+        }
+        if self.magic.contains(module_id) {
+            return Some(MountMode::Magic);
+        }
+        if self.kasumi.contains(module_id) {
+            return Some(MountMode::Kasumi);
+        }
+        None
     }
-    if state.kasumi_modules.iter().any(|id| id == module_id) {
-        return Some(MountMode::Kasumi);
+
+    fn enabled(&self, module_id: &str) -> bool {
+        !self.skipped.contains(module_id)
     }
-    None
 }
 
 fn read_module_metadata(module_path: &Path, module_id: &str) -> ModuleMetadata {
@@ -321,7 +363,7 @@ mod tests {
     };
 
     #[test]
-    fn runtime_modules_payload_keeps_runtime_and_rules_without_metadata() {
+    fn runtime_modules_payload_keeps_runtime_rules_and_default_metadata() {
         let mut config = Config {
             moduledir: PathBuf::from("/modules"),
             default_mode: DefaultMode::Magic,
@@ -335,20 +377,50 @@ mod tests {
             },
         );
 
-        let state = RuntimeState {
-            overlay_modules: vec!["alpha".to_string()],
-            ..Default::default()
-        };
+        let mut state = RuntimeState::default();
+        state.overlay_modules = vec!["alpha".to_string()];
 
         let modules = build_runtime_modules_payload(&config, &state);
         assert_eq!(modules.len(), 1);
 
         let module = &modules[0];
         assert_eq!(module.id, "alpha");
+        assert_eq!(module.name, "alpha");
+        assert_eq!(module.version, "unknown");
+        assert_eq!(module.author, "unknown");
+        assert_eq!(module.description, "No description");
         assert_eq!(module.mode, MountMode::Overlay);
         assert!(module.is_mounted);
         assert!(module.enabled);
         assert_eq!(module.source_path, PathBuf::from("/modules/alpha"));
         assert_eq!(module.rules.default_mode, MountMode::Overlay);
+    }
+
+    #[test]
+    fn scanned_modules_payload_includes_module_prop_metadata() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let module_dir = temp.path().join("alpha");
+        std::fs::create_dir(&module_dir)?;
+        std::fs::write(
+            module_dir.join("module.prop"),
+            "name=Alpha Module\nversion=1.2.3\nauthor=Alice\ndescription=Fast path\n",
+        )?;
+
+        let config = Config {
+            moduledir: temp.path().to_path_buf(),
+            ..Default::default()
+        };
+        let state = RuntimeState::default();
+
+        let modules = build_scanned_modules_payload(&config, &state, temp.path())?;
+        assert_eq!(modules.len(), 1);
+
+        let module = &modules[0];
+        assert_eq!(module.id, "alpha");
+        assert_eq!(module.name, "Alpha Module");
+        assert_eq!(module.version, "1.2.3");
+        assert_eq!(module.author, "Alice");
+        assert_eq!(module.description, "Fast path");
+        Ok(())
     }
 }

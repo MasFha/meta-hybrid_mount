@@ -6,12 +6,12 @@ import {
   runDaemonCommand,
   shouldUseMock,
 } from "./api/core/bridge";
-import type { DaemonCommandPayload } from "./api/core/bridge";
 import { shellEscapeDoubleQuoted } from "./api/core/shell";
 import {
   getStorageUsage,
   getSystemInfo,
   getVersion,
+  init,
   openLink,
   reboot,
 } from "./api/services/systemService";
@@ -32,6 +32,7 @@ import type { AppAPI } from "./api/contracts";
 
 const RealAPI: AppAPI = {
   wakeDaemon: () => ensureDaemonAwake(PATHS.BINARY),
+  init,
   loadConfig: loadConfigFromFile,
   saveConfig: saveConfigToFile,
   resetConfig: async () => {

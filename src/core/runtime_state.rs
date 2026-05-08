@@ -191,6 +191,21 @@ pub struct RuntimeState {
     pub kasumi: KasumiRuntimeInfo,
     #[serde(default)]
     pub daemon: DaemonRuntimeInfo,
+    #[serde(skip)]
+    cached_status_value: Option<serde_json::Value>,
+}
+
+impl RuntimeState {
+    pub fn status_value(&mut self) -> serde_json::Result<&serde_json::Value> {
+        if self.cached_status_value.is_none() {
+            self.cached_status_value = Some(serde_json::to_value(&*self)?);
+        }
+        Ok(self.cached_status_value.as_ref().unwrap())
+    }
+
+    fn invalidate_cache(&mut self) {
+        self.cached_status_value = None;
+    }
 }
 
 impl RuntimeState {
@@ -234,6 +249,7 @@ impl RuntimeState {
             mode_stats,
             kasumi,
             daemon: DaemonRuntimeInfo::default(),
+            cached_status_value: None,
         };
 
         crate::scoped_log!(
@@ -341,6 +357,7 @@ impl RuntimeState {
         clear_recovered_mount_errors(&mut state);
         state.skip_mount_modules = collect_skip_mount_modules(config);
         state.daemon = previous_state.daemon;
+        state.invalidate_cache();
 
         crate::scoped_log!(
             debug,
@@ -371,6 +388,7 @@ impl RuntimeState {
         self.daemon.alive = alive;
         self.daemon.socket_path = socket_path.into();
         self.daemon.last_refresh_ts = refreshed_at;
+        self.invalidate_cache();
     }
 
     pub fn load() -> Result<Self> {
