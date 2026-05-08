@@ -17,7 +17,57 @@ interface WebuiSession {
   token: string;
 }
 
-type DaemonCommandPayload = Record<string, unknown>;
+// Discriminated union matching Rust DaemonCommand #[serde(tag = "type", rename_all = "kebab-case")]
+export type DaemonCommandPayload =
+  | { type: "ping" }
+  | { type: "webui-start" }
+  | { type: "shutdown" }
+  | { type: "status" }
+  | { type: "api-storage" }
+  | { type: "api-mount-stats" }
+  | { type: "api-mount-topology" }
+  | { type: "api-partitions" }
+  | { type: "api-system-info" }
+  | { type: "api-version" }
+  | { type: "api-config-get" }
+  | { type: "api-config-set"; config: unknown }
+  | { type: "api-config-patch"; patch: unknown; apply_runtime?: boolean }
+  | { type: "api-config-reset" }
+  | { type: "api-modules-list"; path?: string | null }
+  | { type: "api-modules-apply"; modules: unknown[] }
+  | { type: "api-lkm" }
+  | { type: "api-hooks" }
+  | { type: "api-kernel-uname" }
+  | { type: "api-open-url"; url: string }
+  | { type: "api-reboot" }
+  | { type: "api-kasumi-maps-add"; rule: unknown }
+  | { type: "api-kasumi-maps-clear" }
+  | { type: "kasumi-status" }
+  | { type: "kasumi-list" }
+  | { type: "kasumi-version" }
+  | { type: "kasumi-features" }
+  | { type: "kasumi-hooks" }
+  | { type: "kasumi-apply-config-runtime" }
+  | { type: "kasumi-clear" }
+  | { type: "kasumi-release-connection" }
+  | { type: "kasumi-invalidate-cache" }
+  | { type: "kasumi-fix-mounts" }
+  | { type: "kasumi-restore-uname-global" }
+  | { type: "kasumi-set-uname"; mode: string; release: string; version: string }
+  | { type: "kasumi-clear-uname"; mode: string }
+  | { type: "kasumi-rule-add"; target: string; source: string; file_type?: number }
+  | { type: "kasumi-rule-merge"; target: string; source: string }
+  | { type: "kasumi-rule-hide"; path: string }
+  | { type: "kasumi-rule-delete"; path: string }
+  | { type: "kasumi-rule-add-dir"; target_base: string; source_dir: string }
+  | { type: "kasumi-rule-remove-dir"; target_base: string; source_dir: string }
+  | { type: "hide-list" }
+  | { type: "hide-add"; path: string }
+  | { type: "hide-remove"; path: string }
+  | { type: "hide-apply" }
+  | { type: "lkm-status" }
+  | { type: "lkm-load" }
+  | { type: "lkm-unload" };
 
 let ksuExec: KsuModule["exec"] | null = null;
 
@@ -108,30 +158,29 @@ export async function readModuleProp(modulePath: string): Promise<string> {
 
 export async function ensureDaemonAwake(binaryPath: string): Promise<void> {
   if (shouldUseMock || !hasExecBridge) return;
-  if (daemonReady) return daemonReady;
-
-  daemonReady = (async () => {
-    const raw = await withTimeout(
-      runCommandExpectOk(hybridMountCommand(binaryPath, "daemon webui-start")),
-      DAEMON_WAKE_TIMEOUT_MS,
-      "hybrid-mount daemon wake timed out",
-    );
-    const payload = parseHybridMountJsonOutput(raw);
-    if (
-      !payload ||
-      typeof payload !== "object" ||
-      typeof (payload as WebuiSession).base_url !== "string" ||
-      typeof (payload as WebuiSession).token !== "string"
-    ) {
-      throw new AppError("hybrid-mount daemon returned invalid WebUI session");
-    }
-    webuiSession = payload as WebuiSession;
-  })().catch((error) => {
-    daemonReady = null;
-    webuiSession = null;
-    throw error;
-  });
-
+  if (!daemonReady) {
+    daemonReady = (async () => {
+      const raw = await withTimeout(
+        runCommandExpectOk(hybridMountCommand(binaryPath, "daemon webui-start")),
+        DAEMON_WAKE_TIMEOUT_MS,
+        "hybrid-mount daemon wake timed out",
+      );
+      const payload = parseDaemonJsonOutput(raw);
+      if (
+        !payload ||
+        typeof payload !== "object" ||
+        typeof (payload as WebuiSession).base_url !== "string" ||
+        typeof (payload as WebuiSession).token !== "string"
+      ) {
+        throw new AppError("hybrid-mount daemon returned invalid WebUI session");
+      }
+      webuiSession = payload as WebuiSession;
+    })().catch((error) => {
+      daemonReady = null;
+      webuiSession = null;
+      throw error;
+    });
+  }
   return daemonReady;
 }
 
@@ -148,7 +197,7 @@ function getStructuredError(payload: unknown): string | null {
   return null;
 }
 
-export function parseHybridMountJsonOutput(raw: string): unknown {
+export function parseDaemonJsonOutput(raw: string): unknown {
   let payload: unknown;
   try {
     payload = JSON.parse(raw) as unknown;
@@ -201,7 +250,7 @@ async function runDaemonHttp(
     window.clearTimeout(timer);
   }
 
-  const payload = parseHybridMountJsonOutput(text);
+  const payload = parseDaemonJsonOutput(text);
   if (!response.ok) {
     throw new AppError(
       payload && typeof payload === "object" && "error" in payload
@@ -412,8 +461,16 @@ export async function runHybridMountJson(
   binaryPath: string,
 ): Promise<unknown> {
   const command = daemonCommandFromArgs(args);
+  return runDaemonCommand(command, binaryPath);
+}
+
+export async function runDaemonCommand(
+  command: DaemonCommandPayload,
+  binaryPath: string,
+): Promise<unknown> {
   await ensureDaemonAwake(binaryPath);
   let lastError: unknown = null;
+  let firstError: unknown = null;
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const session = webuiSession;
@@ -423,6 +480,7 @@ export async function runHybridMountJson(
       return await runDaemonHttp(session, command);
     } catch (error) {
       lastError = error;
+      if (attempt === 0) firstError = error;
       if (
         error instanceof AppError &&
         error.message.includes("daemon HTTP request timed out")
@@ -441,6 +499,9 @@ export async function runHybridMountJson(
   }
 
   if (lastError) {
+    if (firstError && firstError !== lastError) {
+      console.debug("original daemon error (retry also failed)", firstError);
+    }
     throw lastError;
   }
   throw new AppError("hybrid-mount daemon WebUI session is unavailable");

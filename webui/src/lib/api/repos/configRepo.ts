@@ -1,11 +1,12 @@
 import { PATHS } from "../../constants";
 import type { AppConfig } from "../../types";
-import { runHybridMountJson } from "../core/bridge";
+import { runDaemonCommand, runHybridMountJson } from "../core/bridge";
 import { isRecord } from "../core/guards";
-import { shellEscapeDoubleQuoted } from "../core/shell";
 import { normalizeConfig } from "../codec/configCodec";
 
-function extractConfig(payload: unknown): AppConfig {
+export function extractConfig(payload: unknown): AppConfig {
+  // api-config-patch and api-config-set responses wrap the updated config in a `config` field;
+  // api-config-get returns the config object directly.
   if (isRecord(payload) && isRecord(payload.config)) {
     return normalizeConfig(payload.config);
   }
@@ -26,6 +27,8 @@ export async function saveConfigToFile(config: AppConfig): Promise<void> {
     disable_umount: normalized.disable_umount,
     enable_overlay_fallback: normalized.enable_overlay_fallback,
     default_mode: normalized.default_mode,
+    kasumi: normalized.kasumi,
+    rules: normalized.rules,
   });
 }
 
@@ -33,10 +36,12 @@ export async function patchConfigFile(
   patch: Record<string, unknown>,
   options: { applyRuntime?: boolean } = {},
 ): Promise<AppConfig> {
-  const encoded = shellEscapeDoubleQuoted(JSON.stringify(patch));
-  const runtimeFlag = options.applyRuntime ? "--apply-runtime " : "";
-  const payload = await runHybridMountJson(
-    `api config-patch ${runtimeFlag}"${encoded}"`,
+  const payload = await runDaemonCommand(
+    {
+      type: "api-config-patch",
+      patch,
+      apply_runtime: options.applyRuntime !== false,
+    },
     PATHS.BINARY,
   );
   return extractConfig(payload);

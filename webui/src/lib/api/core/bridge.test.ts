@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { AppError } from "./error";
 import {
-  parseHybridMountJsonOutput,
+  parseDaemonJsonOutput,
   readModuleProp,
   resolveShouldUseMock,
   shouldUseMock,
 } from "./bridge";
 
-describe("parseHybridMountJsonOutput", () => {
+describe("parseDaemonJsonOutput", () => {
   it("enables the mock API in test mode", () => {
     expect(shouldUseMock).toBe(true);
   });
@@ -37,14 +37,14 @@ describe("parseHybridMountJsonOutput", () => {
   });
 
   it("parses valid JSON payloads", () => {
-    expect(parseHybridMountJsonOutput('{"storage_mode":"tmpfs"}')).toEqual({
+    expect(parseDaemonJsonOutput('{"storage_mode":"tmpfs"}')).toEqual({
       storage_mode: "tmpfs",
     });
   });
 
   it("parses daemon config payloads", () => {
     expect(
-      parseHybridMountJsonOutput(
+      parseDaemonJsonOutput(
         '{"moduledir":"/data/adb/modules","overlay_mode":"tmpfs"}',
       ),
     ).toEqual({
@@ -55,7 +55,7 @@ describe("parseHybridMountJsonOutput", () => {
 
   it("throws structured CLI error payloads", () => {
     expect(() =>
-      parseHybridMountJsonOutput(
+      parseDaemonJsonOutput(
         '{"type":"error","error":"Failed to connect to daemon socket"}',
       ),
     ).toThrow(AppError);
@@ -63,7 +63,7 @@ describe("parseHybridMountJsonOutput", () => {
 
   it("throws daemon response error payloads", () => {
     expect(() =>
-      parseHybridMountJsonOutput(
+      parseDaemonJsonOutput(
         '{"ok":false,"error":"daemon request failed"}',
       ),
     ).toThrow("daemon request failed");

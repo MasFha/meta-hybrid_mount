@@ -1,5 +1,4 @@
-import { runHybridMountJson } from "../core/bridge";
-import { shellEscapeDoubleQuoted } from "../core/shell";
+import { runDaemonCommand, runHybridMountJson } from "../core/bridge";
 import { DEFAULT_CONFIG, PATHS } from "../../constants";
 import type {
   KernelUnameValues,
@@ -90,10 +89,13 @@ export async function applyKasumiUname(
   if (!release || !version) {
     throw new AppError("uname release and version must both be non-empty");
   }
-  await runHybridMountJson(
-    `kasumi set-uname --mode ${
-      mode === "global" ? "global" : "scoped"
-    } "${shellEscapeDoubleQuoted(release)}" "${shellEscapeDoubleQuoted(version)}"`,
+  await runDaemonCommand(
+    {
+      type: "kasumi-set-uname",
+      mode: mode === "global" ? "global" : "scoped",
+      release,
+      version,
+    },
     PATHS.BINARY,
   );
 }
@@ -101,6 +103,13 @@ export async function applyKasumiUname(
 export async function clearKasumiUname(
   mode: "scoped" | "global" = "scoped",
 ): Promise<void> {
+  await runDaemonCommand(
+    {
+      type: "kasumi-clear-uname",
+      mode: mode === "global" ? "global" : "scoped",
+    },
+    PATHS.BINARY,
+  );
   await updateKasumiConfig(
     {
       uname: {
@@ -113,10 +122,6 @@ export async function clearKasumiUname(
       },
     },
     { applyRuntime: false },
-  );
-  await runHybridMountJson(
-    `kasumi clear-uname --mode ${mode === "global" ? "global" : "scoped"}`,
-    PATHS.BINARY,
   );
 }
 
@@ -139,8 +144,10 @@ export async function addKasumiMapsRule(rule: {
   spoofed_dev: number;
   spoofed_pathname: string;
 }): Promise<void> {
-  const encoded = shellEscapeDoubleQuoted(JSON.stringify(rule));
-  await runHybridMountJson(`api kasumi-maps-add "${encoded}"`, PATHS.BINARY);
+  await runDaemonCommand(
+    { type: "api-kasumi-maps-add", rule },
+    PATHS.BINARY,
+  );
 }
 
 export async function clearKasumiMapsRules(): Promise<void> {

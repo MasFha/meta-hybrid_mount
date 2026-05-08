@@ -1,41 +1,43 @@
 export interface RuntimeStatePayload {
-  pid?: unknown;
-  storage_mode?: unknown;
-  mount_point?: unknown;
-  overlay_modules?: unknown;
-  magic_modules?: unknown;
-  kasumi_modules?: unknown;
-  mount_error_modules?: unknown;
-  mount_error_reasons?: unknown;
-  skip_mount_modules?: unknown;
-  active_mounts?: unknown;
-  tmpfs_xattr_supported?: unknown;
-  mode_stats?: unknown;
-  kasumi?: unknown;
-  daemon?: unknown;
+  pid?: number;
+  storage_mode?: string;
+  mount_point?: string;
+  overlay_modules?: string[];
+  magic_modules?: string[];
+  kasumi_modules?: string[];
+  mount_error_modules?: string[];
+  mount_error_reasons?: Record<string, string>;
+  skip_mount_modules?: string[];
+  active_mounts?: string[];
+  tmpfs_xattr_supported?: boolean;
+  mode_stats?: RuntimeModeStatsPayload;
+  kasumi?: RuntimeKasumiPayload;
+  daemon?: { alive?: boolean; socket_path?: string; last_refresh_ts?: number };
+  // Additional fields not yet typed:
+  [key: string]: unknown;
 }
 
 export interface RuntimeModeStatsPayload {
-  overlayfs?: unknown;
-  magicmount?: unknown;
-  kasumi?: unknown;
+  overlayfs?: number;
+  magicmount?: number;
+  kasumi?: number;
 }
 
 export interface RuntimeKasumiPayload {
-  status?: unknown;
-  available?: unknown;
-  lkm_loaded?: unknown;
-  lkm_autoload?: unknown;
-  lkm_kmi_override?: unknown;
-  lkm_current_kmi?: unknown;
-  lkm_dir?: unknown;
-  protocol_version?: unknown;
-  feature_bits?: unknown;
-  feature_names?: unknown;
-  hooks?: unknown;
-  rule_count?: unknown;
-  user_hide_rule_count?: unknown;
-  mirror_path?: unknown;
+  status?: string;
+  available?: boolean;
+  lkm_loaded?: boolean;
+  lkm_autoload?: boolean;
+  lkm_kmi_override?: string;
+  lkm_current_kmi?: string;
+  lkm_dir?: string;
+  protocol_version?: number | null;
+  feature_bits?: number | null;
+  feature_names?: string[];
+  hooks?: string[];
+  rule_count?: number;
+  user_hide_rule_count?: number;
+  mirror_path?: string;
 }
 
 import { PATHS } from "../../constants";

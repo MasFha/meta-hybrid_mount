@@ -68,6 +68,15 @@ impl Config {
         let content = toml::to_string_pretty(self).context("failed to serialize config")?;
 
         ensure_parent_dir(main_path)?;
+        if main_path.exists() {
+            let backup_path = main_path.with_extension("toml.bak");
+            fs::copy(main_path, &backup_path).with_context(|| {
+                format!(
+                    "failed to create config backup at {}",
+                    backup_path.display()
+                )
+            })?;
+        }
         fs::write(main_path, content)
             .with_context(|| format!("failed to write config file {}", main_path.display()))?;
         Ok(())

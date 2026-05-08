@@ -14,7 +14,7 @@
 
 use std::{
     fs,
-    io::{BufRead, BufReader, Error as IoError, ErrorKind, Write},
+    io::{BufRead, BufReader, Error as IoError, ErrorKind, Read, Write},
     net::{SocketAddr, TcpListener, TcpStream},
     os::unix::{
         fs::{FileTypeExt, MetadataExt, PermissionsExt},
@@ -39,7 +39,10 @@ use signal_hook::{
 
 use super::protocol::{DaemonCommand, DaemonRequest, DaemonResponse};
 use crate::{
-    conf::config::Config,
+    conf::{
+        config::Config,
+        schema::{self},
+    },
     core::{api, runtime_state::RuntimeState, user_hide_rules},
     defs,
     mount::kasumi as kasumi_mount,
@@ -106,7 +109,7 @@ pub fn serve(_config: Config) -> Result<()> {
                         503,
                         "Service Unavailable",
                         &DaemonResponse::error("too many active WebUI daemon connections"),
-                        false,
+                        ConnectionAction::Close,
                     );
                     continue;
                 };
@@ -199,6 +202,15 @@ struct WebuiHttpSession {
     token: String,
 }
 
+fn random_u64_hex() -> Result<String> {
+    let mut buf = [0u8; 8];
+    fs::File::open("/dev/urandom")
+        .context("Failed to open /dev/urandom")?
+        .read_exact(&mut buf)
+        .context("Failed to read random bytes")?;
+    Ok(format!("{:016x}", u64::from_ne_bytes(buf)))
+}
+
 impl WebuiHttpState {
     fn bind() -> Result<Self> {
         let listener = TcpListener::bind(("127.0.0.1", 0))
@@ -209,12 +221,14 @@ impl WebuiHttpState {
         let addr = listener
             .local_addr()
             .context("Failed to read WebUI daemon HTTP listener address")?;
+        let token = format!(
+            "{}{}",
+            random_u64_hex().context("Failed to generate daemon token")?,
+            random_u64_hex().context("Failed to generate daemon token")?
+        );
         Ok(Self {
             listener,
-            session: WebuiHttpSession {
-                addr,
-                token: format!("{:016x}{:016x}", fastrand::u64(..), fastrand::u64(..)),
-            },
+            session: WebuiHttpSession { addr, token },
         })
     }
 
@@ -303,6 +317,12 @@ impl Drop for ActiveWebuiConnectionGuard {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ConnectionAction {
+    Keep,
+    Close,
+}
+
 fn handle_http_connection(
     state: &Arc<Mutex<RuntimeState>>,
     shutdown: &Arc<AtomicBool>,
@@ -333,14 +353,16 @@ fn handle_http_connection(
                         status,
                         reason,
                         &DaemonResponse::error(message),
-                        false,
+                        ConnectionAction::Close,
                     );
                     break;
                 }
                 return Err(err);
             }
         };
-        if handle_http_request(state, shutdown, webui, &mut stream, request)? {
+        if handle_http_request(state, shutdown, webui, &mut stream, request)?
+            == ConnectionAction::Close
+        {
             break;
         }
     }
@@ -433,12 +455,17 @@ fn handle_http_request(
     webui: &WebuiHttpSession,
     stream: &mut TcpStream,
     request: WebuiHttpRequest,
-) -> Result<bool> {
-    let mut keep_alive = !request.close_after_response && !shutdown.load(Ordering::Relaxed);
+) -> Result<ConnectionAction> {
+    let mut connection_action = if request.close_after_response || shutdown.load(Ordering::Relaxed)
+    {
+        ConnectionAction::Close
+    } else {
+        ConnectionAction::Keep
+    };
 
     if request.request_line.starts_with("OPTIONS ") {
-        write_http_response(stream, 204, "No Content", b"", keep_alive)?;
-        return Ok(!keep_alive);
+        write_http_response(stream, 204, "No Content", b"", connection_action)?;
+        return Ok(ConnectionAction::Close);
     }
     if !request.request_line.starts_with("POST /rpc ") {
         write_http_json(
@@ -446,9 +473,9 @@ fn handle_http_request(
             404,
             "Not Found",
             &DaemonResponse::error("unknown WebUI daemon endpoint"),
-            keep_alive,
+            connection_action,
         )?;
-        return Ok(!keep_alive);
+        return Ok(ConnectionAction::Close);
     }
     if !request.authorized {
         write_http_json(
@@ -456,9 +483,9 @@ fn handle_http_request(
             401,
             "Unauthorized",
             &DaemonResponse::error("invalid WebUI daemon token"),
-            keep_alive,
+            connection_action,
         )?;
-        return Ok(!keep_alive);
+        return Ok(ConnectionAction::Close);
     }
 
     let close_after_response = request.close_after_response;
@@ -477,11 +504,15 @@ fn handle_http_request(
         request.command,
     ) {
         Ok(payload) => DaemonResponse::success(payload),
-        Err(err) => DaemonResponse::error(format!("{err:#}")),
+        Err(err) => DaemonResponse::error(format!("{err}")),
     };
-    keep_alive = !close_after_response && !shutdown.load(Ordering::Relaxed);
-    write_http_json(stream, 200, "OK", &response, keep_alive)?;
-    Ok(!keep_alive)
+    connection_action = if close_after_response || shutdown.load(Ordering::Relaxed) {
+        ConnectionAction::Close
+    } else {
+        ConnectionAction::Keep
+    };
+    write_http_json(stream, 200, "OK", &response, connection_action)?;
+    Ok(connection_action)
 }
 
 fn write_http_json(
@@ -489,10 +520,10 @@ fn write_http_json(
     status: u16,
     reason: &str,
     response: &DaemonResponse,
-    keep_alive: bool,
+    connection_action: ConnectionAction,
 ) -> Result<()> {
     let body = serde_json::to_vec(response).context("Failed to serialize WebUI HTTP response")?;
-    write_http_response(stream, status, reason, &body, keep_alive)
+    write_http_response(stream, status, reason, &body, connection_action)
 }
 
 fn write_http_response(
@@ -500,9 +531,13 @@ fn write_http_response(
     status: u16,
     reason: &str,
     body: &[u8],
-    keep_alive: bool,
+    connection_action: ConnectionAction,
 ) -> Result<()> {
-    let connection = if keep_alive { "keep-alive" } else { "close" };
+    let connection = if connection_action == ConnectionAction::Keep {
+        "keep-alive"
+    } else {
+        "close"
+    };
     write!(
         stream,
         "HTTP/1.1 {status} {reason}\r\n\
@@ -511,7 +546,6 @@ fn write_http_response(
          Access-Control-Allow-Origin: *\r\n\
          Access-Control-Allow-Methods: POST, OPTIONS\r\n\
          Access-Control-Allow-Headers: authorization, content-type\r\n\
-         Access-Control-Allow-Private-Network: true\r\n\
          Access-Control-Max-Age: 600\r\n\
          Connection: {connection}\r\n\
          Keep-Alive: timeout=30\r\n\r\n",
@@ -564,6 +598,8 @@ fn read_kernel_uname_payload() -> Result<Value> {
         .context("failed to read /proc/sys/kernel/version")?
         .trim()
         .to_string();
+    // NOTE: these proc reads may reflect spoofed values if Kasumi global uname
+    // spoofing is active at the kernel UTS namespace level, not just the syscall.
     to_value(&json!({ "release": release, "version": version }))
 }
 
@@ -921,8 +957,10 @@ fn dispatch_command(
         DaemonCommand::KasumiClearUname { mode } => {
             let mode = parse_uname_mode(&mode)?;
             match mode {
-                KasumiUnameMode::Scoped => apply_uname(KasumiUnameMode::Scoped, "", "")?,
-                KasumiUnameMode::Global => kasumi::restore_uname_global()?,
+                schema::KasumiUnameMode::Scoped => {
+                    apply_uname(schema::KasumiUnameMode::Scoped, "", "")?
+                }
+                schema::KasumiUnameMode::Global => kasumi::restore_uname_global()?,
             }
             refresh_and_to_value(
                 config,
@@ -1062,9 +1100,7 @@ fn cleanup_stale_pid_file() -> Result<()> {
         return Ok(());
     };
 
-    let alive = unsafe { libc::kill(pid, 0) == 0 }
-        || IoError::last_os_error().raw_os_error() == Some(libc::EPERM);
-    if !alive {
+    if !is_pid_process_alive(pid) {
         match fs::remove_file(defs::PID_FILE) {
             Ok(()) => {}
             Err(err) if err.kind() == ErrorKind::NotFound => {}
@@ -1076,6 +1112,19 @@ fn cleanup_stale_pid_file() -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn is_pid_process_alive(pid: i32) -> bool {
+    let alive = unsafe { libc::kill(pid, 0) == 0 }
+        || IoError::last_os_error().raw_os_error() == Some(libc::EPERM);
+    if !alive {
+        return false;
+    }
+    let cmdline_path = format!("/proc/{pid}/cmdline");
+    match fs::read_to_string(&cmdline_path) {
+        Ok(cmdline) => cmdline.contains("hybrid-mount"),
+        Err(_) => true,
+    }
 }
 
 fn mark_state_stopped_if_offline() -> Result<()> {
@@ -1123,15 +1172,15 @@ fn install_shutdown_flag() -> Result<Arc<AtomicBool>> {
     Ok(shutdown)
 }
 
-fn parse_uname_mode(mode: &str) -> Result<KasumiUnameMode> {
+fn parse_uname_mode(mode: &str) -> Result<schema::KasumiUnameMode> {
     match mode {
-        "scoped" => Ok(KasumiUnameMode::Scoped),
-        "global" => Ok(KasumiUnameMode::Global),
+        "scoped" => Ok(schema::KasumiUnameMode::Scoped),
+        "global" => Ok(schema::KasumiUnameMode::Global),
         _ => bail!("invalid uname mode: {mode} (expected scoped or global)"),
     }
 }
 
-fn apply_uname(mode: KasumiUnameMode, release: &str, version: &str) -> Result<()> {
+fn apply_uname(mode: schema::KasumiUnameMode, release: &str, version: &str) -> Result<()> {
     let mut uname = kasumi::KasumiSpoofUname::default();
     if !release.is_empty() {
         uname.set_release(release)?;
@@ -1141,15 +1190,15 @@ fn apply_uname(mode: KasumiUnameMode, release: &str, version: &str) -> Result<()
     }
 
     match mode {
-        KasumiUnameMode::Scoped => kasumi::set_uname(&uname),
-        KasumiUnameMode::Global => kasumi::set_uname_global(&uname),
+        schema::KasumiUnameMode::Scoped => kasumi::set_uname(&uname),
+        schema::KasumiUnameMode::Global => kasumi::set_uname_global(&uname),
     }
 }
 
-fn display_uname_mode(mode: KasumiUnameMode) -> &'static str {
+fn display_uname_mode(mode: schema::KasumiUnameMode) -> &'static str {
     match mode {
-        KasumiUnameMode::Scoped => "scoped",
-        KasumiUnameMode::Global => "global",
+        schema::KasumiUnameMode::Scoped => "scoped",
+        schema::KasumiUnameMode::Global => "global",
     }
 }
 
@@ -1196,10 +1245,4 @@ impl Drop for DaemonRuntimeGuard {
         let _ = fs::remove_file(defs::PID_FILE);
         let _ = fs::remove_file(defs::SOCKET_FILE);
     }
-}
-
-#[derive(Clone, Copy)]
-enum KasumiUnameMode {
-    Scoped,
-    Global,
 }

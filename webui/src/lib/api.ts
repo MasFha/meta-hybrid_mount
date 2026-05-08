@@ -3,8 +3,10 @@ import { PATHS } from "./constants";
 import {
   ensureDaemonAwake,
   hasExecBridge,
+  runDaemonCommand,
   shouldUseMock,
 } from "./api/core/bridge";
+import type { DaemonCommandPayload } from "./api/core/bridge";
 import { shellEscapeDoubleQuoted } from "./api/core/shell";
 import {
   getStorageUsage,
@@ -74,8 +76,9 @@ const RealAPI: AppAPI = {
   reboot,
 };
 
-export { AppError, hasExecBridge, shellEscapeDoubleQuoted };
+export { AppError, hasExecBridge, runDaemonCommand, shellEscapeDoubleQuoted };
 export type { AppAPI } from "./api/contracts";
+export type { DaemonCommandPayload } from "./api/core/bridge";
 export const API: AppAPI = shouldUseMock
   ? (MockAPI as unknown as AppAPI)
   : RealAPI;
