@@ -63,9 +63,7 @@ describe("parseDaemonJsonOutput", () => {
 
   it("throws daemon response error payloads", () => {
     expect(() =>
-      parseDaemonJsonOutput(
-        '{"ok":false,"error":"daemon request failed"}',
-      ),
+      parseDaemonJsonOutput('{"ok":false,"error":"daemon request failed"}'),
     ).toThrow("daemon request failed");
   });
 

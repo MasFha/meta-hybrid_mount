@@ -86,7 +86,9 @@ const createKasumiStore = () => {
     const s = state as Record<string, unknown> | null;
     if (!s || typeof s !== "object") return;
     const kasumi = s.kasumi as Record<string, unknown> | null;
-    const kasumiModules = Array.isArray(s.kasumi_modules) ? s.kasumi_modules as string[] : [];
+    const kasumiModules = Array.isArray(s.kasumi_modules)
+      ? (s.kasumi_modules as string[])
+      : [];
     setStatus({
       ...current,
       runtime: {
