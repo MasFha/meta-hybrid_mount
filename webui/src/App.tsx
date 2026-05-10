@@ -56,6 +56,7 @@ export default function App() {
   );
   const visibleTabs = createMemo(() => visibleRoutes().map((r) => r.id));
   const tabCount = createMemo(() => Math.max(visibleTabs().length, 1));
+  const isAppReady = createMemo(() => initialDataReady());
 
   const baseTranslateX = createMemo(() => {
     const index = visibleTabs().indexOf(activeTab());
@@ -194,13 +195,13 @@ export default function App() {
     try {
       // uiStore.init() (locale JSON) and wakeDaemon() are independent
       await Promise.all([uiStore.init(), API.wakeDaemon()]);
-      startRoutePreload();
       await API.init().then((payload) => {
         sysStore.loadFromInit(payload);
         kasumiStore.loadFromInit(payload);
         configStore.loadFromInit(payload);
       });
       setInitialDataReady(true);
+      window.setTimeout(startRoutePreload, 0);
       void sysStore.ensureStatusLoaded();
       onSseStateUpdate((state) => sysStore.handleSseUpdate(state));
       onSseStateUpdate((state) => kasumiStore.handleSseUpdate(state));
@@ -217,23 +218,23 @@ export default function App() {
 
   return (
     <div class="app-root">
-      <Show
-        when={uiStore.isReady && initialDataReady()}
-        fallback={
-          <div class="loading-container">
-            <div class="spinner"></div>
-            <span class="loading-text">Loading...</span>
-          </div>
-        }
+      <TopBar />
+      <main
+        class="main-content"
+        ref={containerRef}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchEnd}
       >
-        <TopBar />
-        <main
-          class="main-content"
-          ref={containerRef}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
-          onTouchCancel={handleTouchEnd}
+        <Show
+          when={isAppReady()}
+          fallback={
+            <div class="loading-container" style={{ height: "100%" }}>
+              <div class="spinner"></div>
+              <span class="loading-text">Loading...</span>
+            </div>
+          }
         >
           <div class="swipe-track" classList={{ "is-dragging": isDragging() }}>
             <For each={visibleRoutes()}>
@@ -251,13 +252,13 @@ export default function App() {
               )}
             </For>
           </div>
-        </main>
-        <NavBar
-          activeTab={activeTab()}
-          onTabChange={setActiveTab}
-          tabs={visibleRoutes()}
-        />
-      </Show>
+        </Show>
+      </main>
+      <NavBar
+        activeTab={activeTab()}
+        onTabChange={setActiveTab}
+        tabs={visibleRoutes()}
+      />
       <Toast />
     </div>
   );
