@@ -65,7 +65,8 @@
     "mode_tmpfsDesc": "基于内存，I/O性能优秀，重启即焚",
     "mode_ext4": "Ext4",
     "mode_ext4Desc": "节省内存，使用 Loop 设备",
-    "enableOverlayFallback": "允许 Overlay 回退"
+    "enableOverlayFallback": "允许 Overlay 回退",
+    "daemonStartupMode": "持久化守护进程"
   },
   "modules": {
     "reload": "刷新",

@@ -64,7 +64,8 @@
     "mode_tmpfsDesc": "Dựa trên RAM. I/O nhanh nhất, đặt lại khi khởi động lại.",
     "mode_ext4": "Ext4",
     "mode_ext4Desc": "Hình ảnh lặp lại. Bền bỉ, tiết kiệm RAM.",
-    "enableOverlayFallback": "Bật Overlay Dự phòng"
+    "enableOverlayFallback": "Bật Overlay Dự phòng",
+    "daemonStartupMode": "Daemon thường trú"
   },
   "modules": {
     "reload": "Làm mới",

@@ -27,6 +27,7 @@ export async function saveConfigToFile(config: AppConfig): Promise<void> {
     disable_umount: normalized.disable_umount,
     enable_overlay_fallback: normalized.enable_overlay_fallback,
     default_mode: normalized.default_mode,
+    daemon_startup_mode: normalized.daemon_startup_mode,
     kasumi: normalized.kasumi,
     rules: normalized.rules,
   });

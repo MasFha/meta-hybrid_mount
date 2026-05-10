@@ -187,6 +187,28 @@ impl Default for KasumiConfig {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum DaemonStartupMode {
+    OnDemand,
+    Persistent,
+}
+
+impl Default for DaemonStartupMode {
+    fn default() -> Self {
+        Self::OnDemand
+    }
+}
+
+impl std::fmt::Display for DaemonStartupMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::OnDemand => write!(f, "on-demand"),
+            Self::Persistent => write!(f, "persistent"),
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Config {
     #[serde(default = "default_moduledir")]
@@ -205,6 +227,8 @@ pub struct Config {
     pub kasumi: KasumiConfig,
     #[serde(default)]
     pub rules: HashMap<String, ModuleRules>,
+    #[serde(default)]
+    pub daemon_startup_mode: DaemonStartupMode,
 }
 
 fn default_moduledir() -> PathBuf {
@@ -238,6 +262,7 @@ impl Default for Config {
             default_mode: DefaultMode::default(),
             kasumi: KasumiConfig::default(),
             rules: HashMap::new(),
+            daemon_startup_mode: DaemonStartupMode::default(),
         }
     }
 }

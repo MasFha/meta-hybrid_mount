@@ -64,7 +64,8 @@
     "mode_tmpfsDesc": "На основі оперативної пам'яті. Найшвидший ввід/вивід, скидання після перезавантаження.",
     "mode_ext4": "Ext4",
     "mode_ext4Desc": "Образ з циклічним замиканням. Постійне, економить оперативну пам'ять.",
-    "enableOverlayFallback": "Увімкнути fallback overlay"
+    "enableOverlayFallback": "Увімкнути fallback overlay",
+    "daemonStartupMode": "Постійний демон"
   },
   "modules": {
     "reload": "Оновити",

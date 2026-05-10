@@ -84,6 +84,16 @@ export default function ConfigTab() {
     }
   }
 
+  async function toggleDaemonMode() {
+    const current = configStore.config.daemon_startup_mode;
+    const next = current === "persistent" ? "on-demand" : "persistent";
+    updateConfig("daemon_startup_mode", next as "on-demand" | "persistent");
+    const saved = await saveCurrentConfig();
+    if (!saved) {
+      updateConfig("daemon_startup_mode", current);
+    }
+  }
+
   async function setOverlayMode(mode: string) {
     const prev = configStore.config.overlay_mode;
     updateConfig("overlay_mode", mode as OverlayMode);
@@ -370,6 +380,28 @@ export default function ConfigTab() {
                 <span class="tile-label">
                   {uiStore.L.config?.enableOverlayFallback ||
                     "Enable Overlay Fallback"}
+                </span>
+              </div>
+            </button>
+
+            <button
+              class={`option-tile clickable tertiary ${configStore.config.daemon_startup_mode === "persistent" ? "active" : ""}`}
+              onClick={toggleDaemonMode}
+              type="button"
+            >
+              <md-ripple></md-ripple>
+              <div class="tile-top">
+                <div class="tile-icon">
+                  <md-icon>
+                    <svg viewBox="0 0 24 24">
+                      <path d={ICONS.power} />
+                    </svg>
+                  </md-icon>
+                </div>
+              </div>
+              <div class="tile-bottom">
+                <span class="tile-label">
+                  {uiStore.L.config?.daemonStartupMode || "Persistent Daemon"}
                 </span>
               </div>
             </button>

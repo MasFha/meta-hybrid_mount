@@ -181,6 +181,8 @@ export function normalizeConfig(value: unknown): AppConfig {
       ? next.enable_overlay_fallback
       : DEFAULT_CONFIG.enable_overlay_fallback,
     default_mode: defaultMode,
+    daemon_startup_mode:
+      next.daemon_startup_mode === "persistent" ? "persistent" : "on-demand",
     kasumi: normalizeKasumiConfig(next.kasumi),
     rules,
   };

@@ -64,7 +64,8 @@
     "mode_tmpfsDesc": "На основе RAM. Самый быстрый ввод-вывод, сбрасывается после перезагрузки.",
     "mode_ext4": "Ext4",
     "mode_ext4Desc": "Loopback-образ. Постоянный, экономит RAM.",
-    "enableOverlayFallback": "Включить fallback overlay"
+    "enableOverlayFallback": "Включить fallback overlay",
+    "daemonStartupMode": "Постоянный демон"
   },
   "modules": {
     "reload": "Обновить",

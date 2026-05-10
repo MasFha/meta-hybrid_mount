@@ -8,6 +8,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   enable_overlay_fallback: false,
   overlay_mode: "tmpfs",
   default_mode: "overlay",
+  daemon_startup_mode: "on-demand",
   rules: {},
   kasumi: {
     enabled: false,

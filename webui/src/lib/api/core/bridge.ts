@@ -114,11 +114,70 @@ const DAEMON_WAKE_TIMEOUT_MS = 5000;
 const DAEMON_HTTP_TIMEOUT_MS = 30000;
 const DAEMON_MODULES_TIMEOUT_MS = 15000;
 
+const SESSION_STORAGE_KEY = "mhm_webui_session";
+const DAEMON_PING_TIMEOUT_MS = 2000;
+
 let daemonReady: Promise<void> | null = null;
 let webuiSession: WebuiSession | null = null;
 let sseSource: EventSource | null = null;
 type SseStateHandler = (state: unknown) => void;
 let sseHandlers: SseStateHandler[] = [];
+
+function loadStoredSession(): WebuiSession | null {
+  try {
+    const raw =
+      sessionStorage.getItem(SESSION_STORAGE_KEY) ??
+      localStorage.getItem(SESSION_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = webuiSessionSchema.safeParse(JSON.parse(raw));
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
+function persistSession(session: WebuiSession): void {
+  try {
+    const raw = JSON.stringify(session);
+    sessionStorage.setItem(SESSION_STORAGE_KEY, raw);
+    localStorage.setItem(SESSION_STORAGE_KEY, raw);
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+function clearStoredSession(): void {
+  try {
+    sessionStorage.removeItem(SESSION_STORAGE_KEY);
+    localStorage.removeItem(SESSION_STORAGE_KEY);
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+async function pingDaemonHttp(session: WebuiSession): Promise<boolean> {
+  const controller = new AbortController();
+  const timer = window.setTimeout(
+    () => controller.abort(),
+    DAEMON_PING_TIMEOUT_MS,
+  );
+  try {
+    const response = await fetch(`${session.base_url}/rpc`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${session.token}`,
+      },
+      body: JSON.stringify({ command: { type: "ping" } }),
+      signal: controller.signal,
+    });
+    return response.ok;
+  } catch {
+    return false;
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
 
 function requireExec(): KsuModule["exec"] {
   if (!ksuExec) throw new AppError("No KSU environment");
@@ -166,29 +225,40 @@ export async function readModuleProp(modulePath: string): Promise<string> {
   );
 }
 
+async function coldStartDaemon(binaryPath: string): Promise<WebuiSession> {
+  const raw = await withTimeout(
+    runCommandExpectOk(hybridMountCommand(binaryPath, "daemon webui-start")),
+    DAEMON_WAKE_TIMEOUT_MS,
+    "hybrid-mount daemon wake timed out",
+  );
+  const rawPayload = parseDaemonJson(raw);
+  const parsed = webuiSessionSchema.safeParse(rawPayload);
+  if (!parsed.success) {
+    throw new AppError("hybrid-mount daemon returned invalid WebUI session");
+  }
+  return parsed.data;
+}
+
 export async function ensureDaemonAwake(binaryPath: string): Promise<void> {
   if (shouldUseMock || !hasExecBridge) return;
   if (!daemonReady) {
     daemonReady = (async () => {
-      const raw = await withTimeout(
-        runCommandExpectOk(
-          hybridMountCommand(binaryPath, "daemon webui-start"),
-        ),
-        DAEMON_WAKE_TIMEOUT_MS,
-        "hybrid-mount daemon wake timed out",
-      );
-      const rawPayload = parseDaemonJson(raw);
-      const parsed = webuiSessionSchema.safeParse(rawPayload);
-      if (!parsed.success) {
-        throw new AppError(
-          "hybrid-mount daemon returned invalid WebUI session",
-        );
+      const stored = loadStoredSession();
+      if (stored && (await pingDaemonHttp(stored))) {
+        webuiSession = stored;
+        startSse();
+        return;
       }
-      webuiSession = parsed.data;
+      clearStoredSession();
+
+      const session = await coldStartDaemon(binaryPath);
+      webuiSession = session;
+      persistSession(session);
       startSse();
     })().catch((error) => {
       daemonReady = null;
       webuiSession = null;
+      clearStoredSession();
       throw error;
     });
   }

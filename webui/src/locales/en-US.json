@@ -65,7 +65,8 @@
     "mode_tmpfsDesc": "RAM-based. Fastest I/O, reset on reboot.",
     "mode_ext4": "Ext4",
     "mode_ext4Desc": "Loopback image. Persistent, saves RAM.",
-    "enableOverlayFallback": "Enable Overlay Fallback"
+    "enableOverlayFallback": "Enable Overlay Fallback",
+    "daemonStartupMode": "Persistent Daemon"
   },
   "modules": {
     "reload": "Refresh",

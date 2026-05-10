@@ -64,7 +64,8 @@
     "mode_tmpfsDesc": "基於 RAM，I/O 最快，重啟後重置。",
     "mode_ext4": "Ext4",
     "mode_ext4Desc": "Loopback 映像。可持久保存，節省 RAM。",
-    "enableOverlayFallback": "允許 Overlay 回退"
+    "enableOverlayFallback": "允許 Overlay 回退",
+    "daemonStartupMode": "持久化守護行程"
   },
   "modules": {
     "reload": "重新整理",
