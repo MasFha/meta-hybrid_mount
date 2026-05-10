@@ -37,9 +37,7 @@ export default function App() {
   const [activeTab, setActiveTab] = createSignal("status");
   const [dragOffset, setDragOffset] = createSignal(0);
   const [isDragging, setIsDragging] = createSignal(false);
-  const [initPhase, setInitPhase] = createSignal<
-    "idle" | "starting" | "loading" | "ready"
-  >("idle");
+  const [initialDataReady, setInitialDataReady] = createSignal(false);
   const [visitedTabs, setVisitedTabs] = createSignal(
     new Set<string>([activeTab()]),
   );
@@ -194,16 +192,15 @@ export default function App() {
 
   async function initializeApp() {
     try {
-      setInitPhase("starting");
+      // uiStore.init() (locale JSON) and wakeDaemon() are independent
       await Promise.all([uiStore.init(), API.wakeDaemon()]);
       startRoutePreload();
-      setInitPhase("loading");
       await API.init().then((payload) => {
         sysStore.loadFromInit(payload);
         kasumiStore.loadFromInit(payload);
         configStore.loadFromInit(payload);
       });
-      setInitPhase("ready");
+      setInitialDataReady(true);
       void sysStore.ensureStatusLoaded();
       onSseStateUpdate((state) => sysStore.handleSseUpdate(state));
       onSseStateUpdate((state) => kasumiStore.handleSseUpdate(state));
@@ -213,7 +210,7 @@ export default function App() {
         e instanceof Error ? e.message : "App initialization failed",
         "error",
       );
-      setInitPhase("ready");
+      setInitialDataReady(true);
       return;
     }
   }
@@ -221,18 +218,11 @@ export default function App() {
   return (
     <div class="app-root">
       <Show
-        when={uiStore.isReady && initPhase() === "ready"}
+        when={uiStore.isReady && initialDataReady()}
         fallback={
           <div class="loading-container">
             <div class="spinner"></div>
-            <md-linear-progress indeterminate />
-            <span class="loading-text">
-              {initPhase() === "starting"
-                ? "Starting daemon service..."
-                : initPhase() === "loading"
-                  ? "Loading data..."
-                  : "Loading..."}
-            </span>
+            <span class="loading-text">Loading...</span>
           </div>
         }
       >
