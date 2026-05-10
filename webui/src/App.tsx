@@ -200,6 +200,7 @@ export default function App() {
         configStore.loadFromInit(payload);
       });
       setInitialDataReady(true);
+      void sysStore.ensureStatusLoaded();
       startRoutePreload();
       onSseStateUpdate((state) => sysStore.handleSseUpdate(state));
       onSseStateUpdate((state) => kasumiStore.handleSseUpdate(state));
