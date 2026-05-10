@@ -37,7 +37,9 @@ export default function App() {
   const [activeTab, setActiveTab] = createSignal("status");
   const [dragOffset, setDragOffset] = createSignal(0);
   const [isDragging, setIsDragging] = createSignal(false);
-  const [initialDataReady, setInitialDataReady] = createSignal(false);
+  const [initPhase, setInitPhase] = createSignal<
+    "idle" | "starting" | "loading" | "ready"
+  >("idle");
   const [visitedTabs, setVisitedTabs] = createSignal(
     new Set<string>([activeTab()]),
   );
@@ -192,15 +194,16 @@ export default function App() {
 
   async function initializeApp() {
     try {
-      // uiStore.init() (locale JSON) and wakeDaemon() are independent
+      setInitPhase("starting");
       await Promise.all([uiStore.init(), API.wakeDaemon()]);
       startRoutePreload();
+      setInitPhase("loading");
       await API.init().then((payload) => {
         sysStore.loadFromInit(payload);
         kasumiStore.loadFromInit(payload);
         configStore.loadFromInit(payload);
       });
-      setInitialDataReady(true);
+      setInitPhase("ready");
       void sysStore.ensureStatusLoaded();
       onSseStateUpdate((state) => sysStore.handleSseUpdate(state));
       onSseStateUpdate((state) => kasumiStore.handleSseUpdate(state));
@@ -210,7 +213,7 @@ export default function App() {
         e instanceof Error ? e.message : "App initialization failed",
         "error",
       );
-      setInitialDataReady(true);
+      setInitPhase("ready");
       return;
     }
   }
@@ -218,11 +221,18 @@ export default function App() {
   return (
     <div class="app-root">
       <Show
-        when={uiStore.isReady && initialDataReady()}
+        when={uiStore.isReady && initPhase() === "ready"}
         fallback={
           <div class="loading-container">
             <div class="spinner"></div>
-            <span class="loading-text">Loading...</span>
+            <md-linear-progress indeterminate />
+            <span class="loading-text">
+              {initPhase() === "starting"
+                ? "Starting daemon service..."
+                : initPhase() === "loading"
+                  ? "Loading data..."
+                  : "Loading..."}
+            </span>
           </div>
         }
       >
