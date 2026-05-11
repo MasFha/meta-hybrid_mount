@@ -34,6 +34,7 @@ export interface AppAPI {
   setKasumiEnabled: (enabled: boolean) => Promise<void>;
   setKasumiStealth: (enabled: boolean) => Promise<void>;
   setKasumiHidexattr: (enabled: boolean) => Promise<void>;
+  setKasumiSelinuxFix: (enabled: boolean) => Promise<void>;
   setKasumiDebug: (enabled: boolean) => Promise<void>;
   getOriginalKernelUname: () => Promise<KernelUnameValues>;
   setKasumiUnameMode: (mode: "scoped" | "global") => Promise<void>;

@@ -144,6 +144,8 @@ pub struct KasumiConfig {
     #[serde(default)]
     pub enable_statfs_spoof: bool,
     #[serde(default)]
+    pub enable_selinux_fix: bool,
+    #[serde(default)]
     pub mount_hide: KasumiMountHideConfig,
     #[serde(default)]
     pub statfs_spoof: KasumiStatfsSpoofConfig,
@@ -175,6 +177,7 @@ impl Default for KasumiConfig {
             enable_mount_hide: false,
             enable_maps_spoof: false,
             enable_statfs_spoof: false,
+            enable_selinux_fix: false,
             mount_hide: KasumiMountHideConfig::default(),
             statfs_spoof: KasumiStatfsSpoofConfig::default(),
             hide_uids: Vec::new(),

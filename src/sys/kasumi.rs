@@ -67,7 +67,7 @@ pub const KSM_FEATURE_MOUNT_HIDE: c_int = uapi::KSM_FEATURE_MOUNT_HIDE as c_int;
 pub const KSM_FEATURE_MAPS_SPOOF: c_int = uapi::KSM_FEATURE_MAPS_SPOOF as c_int;
 pub const KSM_FEATURE_STATFS_SPOOF: c_int = uapi::KSM_FEATURE_STATFS_SPOOF as c_int;
 pub const KSM_FEATURE_FAKE_MOUNTINFO: c_int = uapi::KSM_FEATURE_FAKE_MOUNTINFO as c_int;
-pub const KSM_FEATURE_FAKE_SELINUXFS: c_int = uapi::KSM_FEATURE_FAKE_SELINUXFS as c_int;
+pub const KSM_FEATURE_SELINUX_FIX: c_int = uapi::KSM_FEATURE_SELINUX_FIX as c_int;
 
 #[allow(clippy::unnecessary_cast)]
 const KSM_IOC_MAGIC: u8 = uapi::KSM_IOC_MAGIC as u8;
@@ -324,6 +324,8 @@ pub const KSM_IOC_SET_STATFS_SPOOF: KasumiIoctlRequest =
     ioctl::opcode::write::<KasumiStatfsSpoofArg>(KSM_IOC_MAGIC, 27);
 pub const KSM_IOC_SET_UNAME_GLOBAL: KasumiIoctlRequest =
     ioctl::opcode::write::<KasumiSpoofUname>(KSM_IOC_MAGIC, 28);
+pub const KSM_IOC_SELINUX_FIX: KasumiIoctlRequest =
+    ioctl::opcode::write::<c_int>(KSM_IOC_MAGIC, 29);
 
 struct KasumiIoctlNoArg {
     request: KasumiIoctlRequest,
@@ -410,7 +412,7 @@ const FEATURE_NAMES: &[(c_int, &str)] = &[
     (KSM_FEATURE_MAPS_SPOOF, "maps_spoof"),
     (KSM_FEATURE_STATFS_SPOOF, "statfs_spoof"),
     (KSM_FEATURE_FAKE_MOUNTINFO, "fake_mountinfo"),
-    (KSM_FEATURE_FAKE_SELINUXFS, "fake_selinuxfs"),
+    (KSM_FEATURE_SELINUX_FIX, "selinux_fix"),
 ];
 
 pub fn feature_names(bits: c_int) -> Vec<String> {
@@ -962,6 +964,10 @@ pub fn set_statfs_spoof_config(config: &KasumiStatfsSpoofArg) -> Result<()> {
     let mut config = *config;
     ioctl_with_arg("set_statfs_spoof", KSM_IOC_SET_STATFS_SPOOF, &mut config)?;
     ensure_kernel_err("Kasumi statfs_spoof", config.err)
+}
+
+pub fn set_selinux_fix(enable: bool) -> Result<()> {
+    ioctl_with_bool("selinux_fix", KSM_IOC_SELINUX_FIX, enable)
 }
 
 pub fn release_connection() {

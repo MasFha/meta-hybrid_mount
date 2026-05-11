@@ -48,6 +48,7 @@ const RealAPI: AppAPI = {
   setKasumiEnabled: kasumiService.setKasumiEnabled,
   setKasumiStealth: kasumiService.setKasumiStealth,
   setKasumiHidexattr: kasumiService.setKasumiHidexattr,
+  setKasumiSelinuxFix: kasumiService.setKasumiSelinuxFix,
   setKasumiDebug: kasumiService.setKasumiDebug,
   getOriginalKernelUname: kasumiService.getOriginalKernelUname,
   setKasumiUnameMode: kasumiService.setKasumiUnameMode,

@@ -642,6 +642,33 @@ export default function KasumiTab() {
                         {uiStore.L.kasumi?.kernelDebugTitle ?? "Kernel Debug"}
                       </span>
                     </button>
+                    <button
+                      type="button"
+                      class={`kasumi-config-tile ${config()?.enable_selinux_fix ? "active" : ""}`}
+                      disabled={pending()}
+                      onClick={() =>
+                        runAction(
+                          () =>
+                            API.setKasumiSelinuxFix(
+                              !Boolean(config()?.enable_selinux_fix),
+                            ),
+                          uiStore.L.kasumi?.selinuxFixUpdated ??
+                            "SELinux guard updated",
+                        )
+                      }
+                    >
+                      <md-ripple></md-ripple>
+                      <div class="kasumi-config-icon">
+                        <md-icon>
+                          <svg viewBox="0 0 24 24">
+                            <path d={ICONS.shield} />
+                          </svg>
+                        </md-icon>
+                      </div>
+                      <span class="kasumi-config-label">
+                        {uiStore.L.kasumi?.selinuxFixTitle ?? "SELinux Guard"}
+                      </span>
+                    </button>
                   </div>
                   <Show
                     when={

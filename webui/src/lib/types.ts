@@ -123,6 +123,7 @@ export interface KasumiConfig {
   enable_kernel_debug: boolean;
   enable_stealth: boolean;
   enable_hidexattr: boolean;
+  enable_selinux_fix: boolean;
   enable_mount_hide: boolean;
   enable_maps_spoof: boolean;
   enable_statfs_spoof: boolean;

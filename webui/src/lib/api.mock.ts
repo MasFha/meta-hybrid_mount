@@ -16,9 +16,9 @@ import type {
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const KASUMI_LKM_DIR = "/data/adb/modules/hybrid_mount/kasumi_lkm";
-const KASUMI_CURRENT_KMI = "android15-6.6";
+const KASUMI_CURRENT_KMI = "android16-6.12";
 const KASUMI_LKM_FILE =
-  "/data/adb/modules/hybrid_mount/kasumi_lkm/android15-6.6_arm64_kasumi_lkm.ko";
+  "/data/adb/modules/hybrid_mount/kasumi_lkm/android16-6.12_arm64_kasumi_lkm.ko";
 
 function createMockState() {
   return {
@@ -32,6 +32,7 @@ function createMockState() {
       mirrorPath: "/dev/kasumi_mirror",
       stealth: true,
       hideXattr: false,
+      selinuxFix: false,
       kernelDebug: false,
       mapsSpoof: true,
       cmdline: "androidboot.verifiedbootstate=green",
@@ -39,14 +40,14 @@ function createMockState() {
       uname: {
         sysname: "",
         nodename: "",
-        release: "6.6.30-android15-gki",
+        release: "6.12.0-android16-gki",
         version: "#1 SMP PREEMPT",
         machine: "",
         domainname: "",
       },
       originalKernel: {
-        release: "6.6.30-android15-gki",
-        version: "#1 SMP PREEMPT Mon Apr 7 18:20:00 CST 2026",
+        release: "6.12.0-android16-gki",
+        version: "#1 SMP PREEMPT Mon May 11 18:20:00 CST 2026",
       },
       hideUids: [1000],
       mapsRules: [
@@ -99,6 +100,7 @@ function buildMockKasumiConfig(enabled: boolean): KasumiStatus["config"] {
     enable_kernel_debug: kasumi.kernelDebug,
     enable_stealth: kasumi.stealth,
     enable_hidexattr: kasumi.hideXattr,
+    enable_selinux_fix: kasumi.selinuxFix,
     enable_mount_hide: kasumi.mountHide.enabled,
     enable_maps_spoof: kasumi.mapsSpoof,
     enable_statfs_spoof: kasumi.statfsSpoof.enabled,
@@ -150,17 +152,20 @@ function buildMockKasumiStatus(): KasumiStatus {
   return {
     status: available ? "available" : "unavailable",
     available,
-    protocol_version: available ? 15 : null,
-    feature_bits: available ? 487 : null,
+    protocol_version: available ? 16 : null,
+    feature_bits: available ? 0x7f7 : null,
     feature_names: available
       ? [
           "kstat_spoof",
           "uname_spoof",
           "cmdline_spoof",
+          "selinux_bypass",
           "merge_dir",
           "mount_hide",
           "maps_spoof",
           "statfs_spoof",
+          "fake_mountinfo",
+          "selinux_fix",
         ]
       : [],
     hooks: available ? ["d_path", "iterate_dir", "vfs_getattr"] : [],
@@ -198,9 +203,20 @@ export const MockAPI: AppAPI = {
       kasumi_status: {
         status: "enabled",
         available: true,
-        protocol_version: 1,
-        feature_bits: 0,
-        feature_names: [],
+        protocol_version: 16,
+        feature_bits: 0x7f7,
+        feature_names: [
+          "kstat_spoof",
+          "uname_spoof",
+          "cmdline_spoof",
+          "selinux_bypass",
+          "merge_dir",
+          "mount_hide",
+          "maps_spoof",
+          "statfs_spoof",
+          "fake_mountinfo",
+          "selinux_fix",
+        ],
         hooks: [],
         rule_count: 0,
         user_hide_rule_count: 0,
@@ -210,7 +226,7 @@ export const MockAPI: AppAPI = {
         runtime: { snapshot: {}, kasumi_modules: [], active_mounts: [] },
       },
       system_info: {
-        kernel: "Linux localhost 5.15.0 #1 SMP PREEMPT",
+        kernel: "Linux localhost 6.12.0-android16-gki #1 SMP PREEMPT",
         selinux: "Enforcing",
         mount_base: "/data/adb/meta-hybrid/mnt",
         active_mounts: ["system", "product"],
@@ -317,7 +333,7 @@ export const MockAPI: AppAPI = {
   async getSystemInfo(): Promise<SystemInfo> {
     await delay(300);
     return {
-      kernel: "Linux localhost 5.15.0 #1 SMP PREEMPT",
+      kernel: "Linux localhost 6.12.0-android16-gki #1 SMP PREEMPT",
       selinux: "Enforcing",
       mountBase: "/data/adb/meta-hybrid/mnt",
       activeMounts: ["system", "product"],
@@ -340,6 +356,10 @@ export const MockAPI: AppAPI = {
   async setKasumiHidexattr(enabled: boolean): Promise<void> {
     await delay(200);
     mockState.kasumi.hideXattr = enabled;
+  },
+  async setKasumiSelinuxFix(enabled: boolean): Promise<void> {
+    await delay(200);
+    mockState.kasumi.selinuxFix = enabled;
   },
   async setKasumiDebug(enabled: boolean): Promise<void> {
     await delay(200);

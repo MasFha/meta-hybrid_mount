@@ -50,6 +50,10 @@ export async function setKasumiHidexattr(enabled: boolean): Promise<void> {
   await updateKasumiConfig({ enable_hidexattr: enabled });
 }
 
+export async function setKasumiSelinuxFix(enabled: boolean): Promise<void> {
+  await updateKasumiConfig({ enable_selinux_fix: enabled });
+}
+
 export async function setKasumiDebug(enabled: boolean): Promise<void> {
   await updateKasumiConfig({ enable_kernel_debug: enabled });
 }

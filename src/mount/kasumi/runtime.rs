@@ -18,9 +18,9 @@ use anyhow::{Context, Result, bail};
 
 use super::{
     common::{
-        effective_maps_spoof_enabled, effective_mount_hide_enabled, effective_statfs_spoof_enabled,
-        effective_stealth_enabled, feature_supported, has_uname_spoof_config, to_c_long,
-        to_c_ulong,
+        effective_maps_spoof_enabled, effective_mount_hide_enabled, effective_selinux_fix_enabled,
+        effective_statfs_spoof_enabled, effective_stealth_enabled, feature_supported,
+        has_uname_spoof_config, to_c_long, to_c_ulong,
     },
     compile::{CompiledRules, compile_rules, log_compiled_rule_summary},
     status::{can_operate, hook_lines},
@@ -34,8 +34,9 @@ use crate::{
     defs,
     sys::kasumi::{
         self, KSM_FEATURE_CMDLINE_SPOOF, KSM_FEATURE_KSTAT_SPOOF, KSM_FEATURE_MAPS_SPOOF,
-        KSM_FEATURE_MOUNT_HIDE, KSM_FEATURE_STATFS_SPOOF, KSM_FEATURE_UNAME_SPOOF, KasumiMapsRule,
-        KasumiMountHideArg, KasumiSpoofKstat, KasumiSpoofUname, KasumiStatfsSpoofArg,
+        KSM_FEATURE_MOUNT_HIDE, KSM_FEATURE_SELINUX_FIX, KSM_FEATURE_STATFS_SPOOF,
+        KSM_FEATURE_UNAME_SPOOF, KasumiMapsRule, KasumiMountHideArg, KasumiSpoofKstat,
+        KasumiSpoofUname, KasumiStatfsSpoofArg,
     },
 };
 
@@ -49,6 +50,7 @@ fn auxiliary_features_requested(config: &config::Config) -> bool {
         || effective_mount_hide_enabled(config)
         || effective_maps_spoof_enabled(config)
         || effective_statfs_spoof_enabled(config)
+        || effective_selinux_fix_enabled(config)
         || has_uname_spoof_config(config)
         || !config.kasumi.cmdline_value.is_empty()
         || !config.kasumi.hide_uids.is_empty()
@@ -192,6 +194,25 @@ fn apply_runtime_switches(
                 "feature skip: name=statfs_spoof, enabled=true, reason=unsupported"
             );
         }
+    }
+
+    let selinux_fix_enabled = effective_selinux_fix_enabled(config);
+    if feature_supported(features, KSM_FEATURE_SELINUX_FIX) {
+        if let Err(err) = kasumi::set_selinux_fix(selinux_fix_enabled) {
+            crate::scoped_log!(
+                warn,
+                "mount:kasumi",
+                "feature apply failed: name=selinux_fix, enabled={}, error={:#}",
+                selinux_fix_enabled,
+                err
+            );
+        }
+    } else if selinux_fix_enabled {
+        crate::scoped_log!(
+            warn,
+            "mount:kasumi",
+            "feature skip: name=selinux_fix, enabled=true, reason=unsupported"
+        );
     }
 
     Ok(())

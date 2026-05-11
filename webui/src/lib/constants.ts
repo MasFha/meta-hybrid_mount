@@ -19,6 +19,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     enable_kernel_debug: false,
     enable_stealth: false,
     enable_hidexattr: false,
+    enable_selinux_fix: false,
     enable_mount_hide: false,
     enable_maps_spoof: false,
     enable_statfs_spoof: false,

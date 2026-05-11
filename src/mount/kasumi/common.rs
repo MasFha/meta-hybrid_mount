@@ -47,6 +47,10 @@ pub(super) fn effective_statfs_spoof_enabled(config: &config::Config) -> bool {
         || config.kasumi.statfs_spoof.spoof_f_type != 0
 }
 
+pub(super) fn effective_selinux_fix_enabled(config: &config::Config) -> bool {
+    config.kasumi.enable_selinux_fix || config.kasumi.enable_hidexattr
+}
+
 pub(super) fn has_uname_spoof_config(config: &config::Config) -> bool {
     !config.kasumi.uname.sysname.is_empty()
         || !config.kasumi.uname.nodename.is_empty()

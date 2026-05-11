@@ -86,6 +86,9 @@ export function normalizeKasumiConfig(value: unknown): KasumiConfig {
     enable_hidexattr: isBoolean(next.enable_hidexattr)
       ? next.enable_hidexattr
       : DEFAULT_CONFIG.kasumi.enable_hidexattr,
+    enable_selinux_fix: isBoolean(next.enable_selinux_fix)
+      ? next.enable_selinux_fix
+      : DEFAULT_CONFIG.kasumi.enable_selinux_fix,
     enable_mount_hide: isBoolean(next.enable_mount_hide)
       ? next.enable_mount_hide
       : DEFAULT_CONFIG.kasumi.enable_mount_hide,
