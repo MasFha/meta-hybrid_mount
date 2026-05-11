@@ -5,7 +5,7 @@
 ![Language](https://img.shields.io/badge/Language-Rust-orange?style=flat-square&logo=rust)
 ![Platform](https://img.shields.io/badge/Platform-Android-green?style=flat-square&logo=android)
 ![License](https://img.shields.io/badge/License-Apache--2.0-blue?style=flat-square)
-![Version](https://img.shields.io/badge/Version-4.0-8A2BE2?style=flat-square)
+![Version](https://img.shields.io/badge/Version-4.0.1-8A2BE2?style=flat-square)
 
 Hybrid Mount is a mount orchestration metamodule for **KernelSU** and **APatch**.
 It merges module files into Android partitions through a unified policy engine backed by three mount backends:
@@ -43,8 +43,9 @@ A built-in **SolidJS WebUI** provides graphical management, live state monitorin
 - **Deterministic planning** — conflicts are detected at plan time, not discovered randomly at boot.
 - **Built-in WebUI** — manage modules, edit configuration, monitor runtime state, and control Kasumi features from a browser or WebView.
 - **Kasumi runtime integration** — LKM autoload, mirror routing, mount hiding, maps/statfs spoofing, UID hiding, uname spoofing, and kstat rules.
-- **Recovery-friendly** — stale runtime files are cleaned automatically; misconfigurations can be reset with `gen-config`.
-- **Automation-friendly** — JSON-over-Unix-socket daemon protocol for scripting or external controllers.
+- **Config caching** — runtime config cache with incremental patching and immediate apply support.
+- **Recovery-friendly** — stale runtime files are cleaned automatically; misconfigurations can be reset via `api config-reset`.
+- **Automation-friendly** — JSON-over-Unix-socket daemon protocol + HTTP API for scripting or external controllers.
 
 ---
 
@@ -64,7 +65,7 @@ A built-in **SolidJS WebUI** provides graphical management, live state monitorin
 hybrid-mount daemon status
 
 # List detected modules
-hybrid-mount modules
+hybrid-mount api modules-list
 
 # Open the WebUI in your browser
 # (the daemon prints the URL to logcat on startup)
@@ -111,7 +112,7 @@ When `enable_overlay_fallback = true`, modules planned for OverlayFS that cannot
 
 ## WebUI
 
-Hybrid Mount includes a **SolidJS-based WebUI** served by the daemon over a local TCP socket. The daemon prints the access URL to logcat on startup.
+Hybrid Mount includes a **SolidJS-based WebUI** served by the daemon over a local TCP socket (HTTP/SSE). CLI and automation clients communicate over a Unix socket. The daemon prints the WebUI access URL to logcat on startup.
 
 ### Capabilities
 
@@ -136,22 +137,21 @@ Default path: `/data/adb/hybrid-mount/config.toml`.
 | --- | --- | --- | --- |
 | `moduledir` | string | `/data/adb/modules` | Module source directory. |
 | `mountsource` | string | auto-detect | Runtime source tag (`KSU`, `APatch`). |
-| `partitions` | list | `[]` | Extra managed partitions. |
 | `overlay_mode` | `ext4` \| `tmpfs` | `ext4` | Overlay upper/work storage mode. |
 | `disable_umount` | bool | `false` | Skip umount operations (debug only). |
 | `enable_overlay_fallback` | bool | `false` | Retry overlay-planned modules as Magic Mount when OverlayFS is unavailable. |
 | `default_mode` | `overlay` \| `magic` \| `kasumi` | `overlay` | Global default mount policy. |
+| `daemon_startup_mode` | `on-demand` \| `persistent` | `on-demand` | Daemon startup behavior. |
 | `rules` | map | `{}` | Per-module and per-path mount policies. |
 
 ### Example
 
 ```toml
 moduledir = "/data/adb/modules"
-mountsource = "KSU"
-partitions = ["system", "vendor"]
 overlay_mode = "ext4"
 enable_overlay_fallback = true
 default_mode = "overlay"
+daemon_startup_mode = "on-demand"
 
 [rules.viper4android]
 default_mode = "magic"
@@ -199,7 +199,8 @@ Setting `kasumi.enabled = true` makes the backend available. The Kasumi runtime 
 | `kasumi.enable_statfs_spoof` | Enable `statfs` spoofing. |
 | `kasumi.statfs_spoof.path` / `.spoof_f_type` | Path-scoped statfs spoof configuration. |
 | `kasumi.hide_uids` | UIDs to hide from Kasumi-aware queries. |
-| `kasumi.uname.*` | Structured uname spoof (sysname, release, version, machine). |
+| `kasumi.uname_mode` | Uname spoof mode: `scoped` (per-process) or `global`. |
+| `kasumi.uname.*` | Structured uname spoof (sysname, nodename, release, version, machine, domainname). |
 | `kasumi.cmdline_value` | Replacement `/proc/cmdline` content. |
 | `kasumi.kstat_rules` | Per-target stat metadata spoof rules. |
 
@@ -210,35 +211,29 @@ Setting `kasumi.enabled = true` makes the backend available. The Kasumi runtime 
 hybrid-mount kasumi status
 hybrid-mount kasumi version
 hybrid-mount kasumi features
+hybrid-mount kasumi hooks
 hybrid-mount kasumi list          # list active rules
 hybrid-mount lkm status
 
-# Enable / disable runtime features
-hybrid-mount kasumi enable
-hybrid-mount kasumi disable
+# Runtime control
+hybrid-mount kasumi apply-config-runtime
+hybrid-mount kasumi clear
+hybrid-mount kasumi release-connection
+hybrid-mount kasumi invalidate-cache
+hybrid-mount kasumi fix-mounts
 
-# Mount hiding
-hybrid-mount kasumi mount-hide enable --path-pattern /dev/kasumi_mirror
-
-# statfs spoofing
-hybrid-mount kasumi statfs-spoof enable --path /system --f-type 0x794c7630
-
-# Maps spoof rules
-hybrid-mount kasumi maps add \
-  --target-ino 1 --target-dev 2 \
-  --spoofed-ino 3 --spoofed-dev 4 \
-  --path /dev/kasumi_mirror/system/bin/sh
-
-# Kstat spoof rules
-hybrid-mount kasumi kstat upsert \
-  --target-ino 11 --target-path /system/bin/app_process64 \
-  --spoofed-ino 22 --spoofed-dev 33
+# Uname spoofing (scoped or global)
+hybrid-mount kasumi set-uname --mode scoped <release> <version>
+hybrid-mount kasumi clear-uname --mode scoped
+hybrid-mount kasumi restore-uname-global
 
 # Rule management
 hybrid-mount kasumi rule add --target /system/bin/tool --source /data/adb/modules/my_module/system/bin/tool
 hybrid-mount kasumi rule merge --target /system/lib64 --source /data/adb/modules/my_module/system/lib64
 hybrid-mount kasumi rule hide --path /system/bin/su
 hybrid-mount kasumi rule delete --path /system/bin/old_tool
+hybrid-mount kasumi rule add-dir --target-base /system/lib64 --source-dir /data/adb/modules/my_module/system/lib64
+hybrid-mount kasumi rule remove-dir --target-base /system/lib64 --source-dir /data/adb/modules/my_module/system/lib64
 ```
 
 ---
@@ -282,23 +277,41 @@ hybrid-mount [OPTIONS] [COMMAND]
 ### Global options
 
 | Flag | Description |
-|------|-------------|
+| ---- | ----------- |
 | `-c, --config <PATH>` | Custom config file path. |
-| `-m, --moduledir <PATH>` | Override module directory. |
-| `-s, --mountsource <SOURCE>` | Override source tag. |
-| `-p, --partitions <CSV>` | Override partition list. |
 
 ### Subcommands
 
 | Command | Description |
-|---------|-------------|
+| ------- | ----------- |
 | `gen-config` | Generate a default config file. |
-| `show-config` | Print effective config as JSON. |
-| `save-config --payload <HEX_JSON>` | Save config from a WebUI payload. |
-| `save-module-rules --module <ID> --payload <HEX_JSON>` | Update rules for one module. |
-| `modules` | List detected modules. |
-| `daemon status` | Query daemon runtime state. |
+| `logs` | Print recent daemon logs. |
+| `api storage` | Query storage mode (ext4/tmpfs). |
+| `api mount-stats` | Print mount statistics. |
+| `api mount-topology` | Print mount topology tree. |
+| `api partitions` | List managed partitions. |
+| `api system-info` | Print system information. |
+| `api version` | Print daemon version. |
+| `api config-get` | Print effective config as JSON. |
+| `api config-set --config <JSON>` | Replace full config. |
+| `api config-patch --patch <JSON>` | Merge patch into config. |
+| `api config-reset` | Reset config to defaults. |
+| `api modules-list` | List detected modules. |
+| `api modules-apply --modules <JSON>` | Apply module mode changes. |
+| `api lkm` | Query LKM status. |
+| `api features` | List supported features. |
+| `api hooks` | List Kasumi hooks status. |
+| `api kernel-uname` | Print kernel uname. |
+| `api open-url --url <URL>` | Open URL on device. |
+| `api reboot` | Reboot the device. |
+| `api kasumi-maps-add --rule <JSON>` | Add a Kasumi maps spoof rule. |
+| `api kasumi-maps-clear` | Clear all Kasumi maps spoof rules. |
+| `daemon launch` | Start daemon in foreground. |
+| `daemon serve` | Start daemon (service mode). |
+| `daemon ping` | Check daemon liveness. |
+| `daemon webui-start` | Start WebUI only. |
 | `daemon stop` | Stop the daemon. |
+| `daemon status` | Query daemon runtime state. |
 | `kasumi ...` | Kasumi management (see [Kasumi](#kasumi)). |
 | `lkm load / unload / status` | LKM lifecycle management. |
 | `hide list / add / remove / apply` | User hide rule management. |
@@ -307,7 +320,7 @@ hybrid-mount [OPTIONS] [COMMAND]
 
 ## Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────┐
 │                  config.toml                  │
 └──────────────────┬──────────────────────────┘
@@ -339,16 +352,19 @@ hybrid-mount [OPTIONS] [COMMAND]
 
 ### Source layout
 
-```
+```text
 src/
-├── conf/          Config schema, TOML loader, CLI definition
+├── conf/          Config schema, TOML loader, CLI definition, handlers
 ├── domain/        Core types: MountMode, ModuleRules, path matching
+├── partitions/    Managed partition auto-discovery
 ├── core/
 │   ├── inventory/ Module discovery and listing
 │   ├── ops/       Mount plan generation and per-backend execution
-│   ├── daemon/    Unix socket server, HTTP/SSE, protocol
+│   ├── daemon/    Unix + TCP dual-protocol daemon (CLI + WebUI/SSE)
 │   ├── api/       Payload builders for WebUI endpoints
-│   └── startup/   Boot sequence, recovery, retry logic
+│   ├── startup/   Boot sequence, recovery, retry logic
+│   ├── storage/   Shared storage helpers (ext4 image, tmpfs)
+│   └── runtime_state/ Daemon state persistence
 ├── mount/
 │   ├── overlayfs/ OverlayFS backend (ext4 image / tmpfs)
 │   ├── magic_mount/ Bind-mount backend
@@ -360,8 +376,8 @@ webui/
 ├── src/
 │   ├── routes/    Page components (Status, Config, Modules, Kasumi, Info)
 │   ├── components/ Shared UI components (NavBar, Toast, Skeleton)
-│   └── lib/       API bridge, stores, codecs, i18n
-└── locales/       9-language internationalization
+│   ├── lib/       API bridge, stores, codecs, i18n
+│   └── locales/   9-language internationalization
 
 xtask/             Build and release automation
 module/            Module packaging scripts and static assets
@@ -413,9 +429,10 @@ The release profile uses `opt-level = 3`, `lto = "fat"`, `codegen-units = 1`, `s
 ## Operational Notes
 
 - **Mount source auto-detection**: fresh installs detect the runtime environment automatically. Only set `mountsource` explicitly if auto-detection fails.
-- **Recovery from bad config**: run `hybrid-mount gen-config` to reset to defaults, then reapply rules incrementally.
+- **Recovery from bad config**: run `hybrid-mount api config-reset` to reset to defaults, then reapply rules incrementally. Use `gen-config` to regenerate a fresh config file.
+- **Config caching**: the runtime maintains a cached config. Use `api config-patch --apply-runtime` to apply changes immediately, or restart the daemon.
 - **Kasumi LKM**: the LKM must match the running kernel. Use `lkm_kmi_override` if the auto-detected KMI is incorrect.
-- **`kasumi kstat clear-config`**: only removes persisted config. Existing kernel-side rules persist until LKM reload or runtime rebuild.
+- **`kasumi clear`**: clears runtime state and releases kernel connection. Existing kernel-side rules may persist until LKM reload.
 - **Binary size**: prefer dependency feature trimming and profile tuning before invasive refactoring.
 
 ---
