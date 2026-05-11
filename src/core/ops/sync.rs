@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{collections::HashSet, fs, path::Path};
+use std::path::Path;
 
 use anyhow::{Context, Result};
 
@@ -23,7 +23,9 @@ use crate::{
         recovery::{FailureStage, ModuleStageFailure},
     },
     partitions,
-    sys::fs::{prune_empty_dirs, remove_path, set_overlay_opaque, sync_dir},
+    sys::fs::{
+        commit_prepared_dir, finalize_copied_tree, prune_orphaned_children, remove_path, sync_dir,
+    },
 };
 
 pub fn perform_sync(
@@ -34,11 +36,15 @@ pub fn perform_sync(
     crate::scoped_log!(info, "sync", "start: target={}", target_base.display());
     let managed_partitions = partitions::managed_partition_names();
 
-    prune_orphaned_modules(modules, target_base)?;
+    prune_orphaned_children(
+        target_base,
+        modules.iter().map(|module| module.id.as_str()),
+        &["lost+found", "hybrid_mount"],
+        "sync",
+    )?;
 
     for module in modules {
         let dst = target_base.join(&module.id);
-        let dst_backup = target_base.join(format!(".backup_{}", module.id));
 
         if !has_managed_mount_root(module, &managed_partitions) {
             crate::scoped_log!(
@@ -54,9 +60,7 @@ pub fn perform_sync(
 
         let tmp_dst = target_base.join(format!(".tmp_{}", module.id));
 
-        if tmp_dst.exists() {
-            let _ = fs::remove_dir_all(&tmp_dst);
-        }
+        let _ = remove_path(&tmp_dst);
 
         let sync_stats = match sync_dir(&module.source_path, &tmp_dst, &managed_partitions) {
             Ok(stats) => stats,
@@ -68,7 +72,7 @@ pub fn perform_sync(
                     module.id,
                     e
                 );
-                let _ = fs::remove_dir_all(&tmp_dst);
+                let _ = remove_path(&tmp_dst);
                 return Err(ModuleStageFailure::new(
                     FailureStage::Sync,
                     vec![module.id.clone()],
@@ -85,126 +89,26 @@ pub fn perform_sync(
                 "module skip: id={}, reason=no_mount_content_after_sync",
                 module.id
             );
-            let _ = fs::remove_dir_all(&tmp_dst);
+            let _ = remove_path(&tmp_dst);
             continue;
         }
 
-        if let Err(e) = prune_empty_dirs(&tmp_dst) {
-            crate::scoped_log!(
-                warn,
-                "sync",
-                "prune empty dirs failed: id={}, error={}",
-                module.id,
-                e
-            );
-        }
-
-        for opaque_dir in sync_stats.opaque_dirs {
-            if let Err(e) = set_overlay_opaque(&opaque_dir) {
-                crate::scoped_log!(
-                    warn,
-                    "sync",
-                    "apply overlay opaque failed: id={}, path={}, error={}",
-                    module.id,
-                    opaque_dir.display(),
-                    e
-                );
-            } else {
-                crate::scoped_log!(
-                    debug,
-                    "sync",
-                    "set overlay opaque: id={}, path={}",
-                    module.id,
-                    opaque_dir.display()
-                );
-            }
-        }
-
-        let mut backup_created = false;
-        if dst.exists() {
-            if let Err(e) = fs::rename(&dst, &dst_backup) {
-                crate::scoped_log!(
-                    error,
-                    "sync",
-                    "backup existing failed: id={}, error={}",
-                    module.id,
-                    e
-                );
-                let _ = fs::remove_dir_all(&tmp_dst);
-                return Err(ModuleStageFailure::new(
-                    FailureStage::Sync,
-                    vec![module.id.clone()],
-                    e.into(),
-                ))
-                .with_context(|| format!("Failed to back up module {}", module.id));
-            }
-            backup_created = true;
-        }
-
-        if let Err(e) = fs::rename(&tmp_dst, &dst) {
+        finalize_copied_tree(&module.id, &tmp_dst, &sync_stats.opaque_dirs);
+        if let Err(e) = commit_prepared_dir(&module.id, &tmp_dst, &dst) {
             crate::scoped_log!(
                 error,
                 "sync",
-                "atomic rename failed: id={}, error={}",
+                "commit prepared module failed: id={}, error={}",
                 module.id,
                 e
             );
-            if backup_created {
-                let _ = fs::rename(&dst_backup, &dst);
-            }
-            let _ = fs::remove_dir_all(&tmp_dst);
+            let _ = remove_path(&tmp_dst);
             return Err(ModuleStageFailure::new(
                 FailureStage::Sync,
                 vec![module.id.clone()],
                 e.into(),
             ))
             .with_context(|| format!("Failed to commit synced module {}", module.id));
-        }
-
-        if backup_created && let Err(e) = fs::remove_dir_all(&dst_backup) {
-            crate::scoped_log!(
-                warn,
-                "sync",
-                "cleanup backup failed: id={}, error={}",
-                module.id,
-                e
-            );
-        }
-    }
-
-    Ok(())
-}
-
-fn prune_orphaned_modules(modules: &[Module], target_base: &Path) -> Result<()> {
-    if !target_base.exists() {
-        return Ok(());
-    }
-
-    let active_ids: HashSet<&str> = modules.iter().map(|m| m.id.as_str()).collect();
-
-    for entry in target_base.read_dir()?.flatten() {
-        let path = entry.path();
-
-        let name_os = entry.file_name();
-
-        let name = name_os.to_string_lossy();
-
-        if name != "lost+found"
-            && name != "hybrid_mount"
-            && !name.starts_with('.')
-            && !active_ids.contains(name.as_ref())
-        {
-            crate::scoped_log!(info, "sync", "prune orphan: name={}", name);
-
-            if let Err(e) = remove_path(&path) {
-                crate::scoped_log!(
-                    warn,
-                    "sync",
-                    "remove orphan failed: name={}, error={}",
-                    name,
-                    e
-                );
-            }
         }
     }
 

@@ -107,6 +107,42 @@ pub fn remove_path(path: &Path) -> Result<()> {
     }
 }
 
+pub fn prune_orphaned_children<'a, I>(
+    target_base: &Path,
+    active_names: I,
+    preserved_names: &[&str],
+    log_scope: &str,
+) -> Result<()>
+where
+    I: IntoIterator<Item = &'a str>,
+{
+    if !target_base.exists() {
+        return Ok(());
+    }
+
+    let active_names: HashSet<&str> = active_names.into_iter().collect();
+
+    for entry in target_base.read_dir()?.flatten() {
+        let path = entry.path();
+        let name_os = entry.file_name();
+        let name = name_os.to_string_lossy();
+
+        if name.starts_with('.')
+            || active_names.contains(name.as_ref())
+            || preserved_names.iter().any(|preserved| *preserved == name)
+        {
+            continue;
+        }
+
+        log::info!("[{log_scope}] prune orphan: name={name}");
+        if let Err(err) = remove_path(&path) {
+            log::warn!("[{log_scope}] remove orphan failed: name={name}, error={err}");
+        }
+    }
+
+    Ok(())
+}
+
 pub fn ensure_dir_like(src: &Path, dst: &Path) -> Result<()> {
     if !dst.exists() {
         fs::create_dir_all(dst)?;
@@ -142,6 +178,85 @@ pub fn copy_non_dir_entry(
         clone_ownership(src, dst);
         clone_selinux_context(src, dst);
     }
+    Ok(())
+}
+
+pub fn finalize_copied_tree(id: &str, root: &Path, opaque_dirs: &[PathBuf]) {
+    if let Err(err) = prune_empty_dirs(root) {
+        crate::scoped_log!(
+            warn,
+            "fs:copy",
+            "prune empty dirs failed: id={}, error={}",
+            id,
+            err
+        );
+    }
+
+    for opaque_dir in opaque_dirs {
+        if let Err(err) = super::xattr::set_overlay_opaque(opaque_dir) {
+            crate::scoped_log!(
+                warn,
+                "fs:copy",
+                "apply overlay opaque failed: id={}, path={}, error={}",
+                id,
+                opaque_dir.display(),
+                err
+            );
+        } else {
+            crate::scoped_log!(
+                debug,
+                "fs:copy",
+                "set overlay opaque: id={}, path={}",
+                id,
+                opaque_dir.display()
+            );
+        }
+    }
+}
+
+pub fn commit_prepared_dir(id: &str, tmp_dst: &Path, final_dst: &Path) -> Result<()> {
+    let backup_dst = final_dst
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join(format!(".backup_{id}"));
+    remove_path(&backup_dst)?;
+
+    let mut backup_created = false;
+    if final_dst.exists() {
+        fs::rename(final_dst, &backup_dst).with_context(|| {
+            format!(
+                "failed to back up prepared dir {id} from {} to {}",
+                final_dst.display(),
+                backup_dst.display()
+            )
+        })?;
+        backup_created = true;
+    }
+
+    if let Err(err) = fs::rename(tmp_dst, final_dst).with_context(|| {
+        format!(
+            "failed to commit prepared dir {id} from {} to {}",
+            tmp_dst.display(),
+            final_dst.display()
+        )
+    }) {
+        if backup_created {
+            let _ = fs::rename(&backup_dst, final_dst);
+        }
+        return Err(err);
+    }
+
+    if backup_created && let Err(err) = remove_path(&backup_dst) {
+        crate::scoped_log!(
+            warn,
+            "fs:copy",
+            "cleanup backup failed: id={}, path={}, error={:#}",
+            id,
+            backup_dst.display(),
+            err
+        );
+    }
+
     Ok(())
 }
 

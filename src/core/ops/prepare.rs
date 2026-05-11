@@ -34,7 +34,8 @@ use crate::{
     domain::MountMode,
     partitions,
     sys::fs::{
-        copy_non_dir_entry, ensure_dir_like, prune_empty_dirs, remove_path, set_overlay_opaque,
+        commit_prepared_dir, copy_non_dir_entry, ensure_dir_like, finalize_copied_tree,
+        prune_orphaned_children, remove_path,
     },
     utils,
 };
@@ -362,7 +363,12 @@ fn prepare_mount_plan_with_root(
 
     fs::create_dir_all(target_base)
         .with_context(|| format!("failed to create storage root {}", target_base.display()))?;
-    prune_orphaned_modules(modules, target_base)?;
+    prune_orphaned_children(
+        target_base,
+        modules.iter().map(|module| module.id.as_str()),
+        &["lost+found", "hybrid_mount"],
+        "prepare",
+    )?;
 
     let module_rank: HashMap<&str, usize> = modules
         .iter()
@@ -430,8 +436,8 @@ fn prepare_mount_plan_with_root(
             continue;
         }
 
-        if let Err(err) = finish_prepared_module(module, &tmp_dst, &final_dst, &outcome.opaque_dirs)
-        {
+        finalize_copied_tree(&module.id, &tmp_dst, &outcome.opaque_dirs);
+        if let Err(err) = commit_prepared_dir(&module.id, &tmp_dst, &final_dst) {
             let _ = remove_path(&tmp_dst);
             return Err(
                 ModuleStageFailure::new(FailureStage::Sync, vec![module.id.clone()], err).into(),
@@ -577,90 +583,6 @@ fn prepare_module(
     Ok(outcome)
 }
 
-fn finish_prepared_module(
-    module: &Module,
-    tmp_dst: &Path,
-    final_dst: &Path,
-    opaque_dirs: &[PathBuf],
-) -> Result<()> {
-    if let Err(err) = prune_empty_dirs(tmp_dst) {
-        crate::scoped_log!(
-            warn,
-            "prepare",
-            "prune empty dirs failed: id={}, error={}",
-            module.id,
-            err
-        );
-    }
-
-    for opaque_dir in opaque_dirs {
-        if let Err(err) = set_overlay_opaque(opaque_dir) {
-            crate::scoped_log!(
-                warn,
-                "prepare",
-                "apply overlay opaque failed: id={}, path={}, error={}",
-                module.id,
-                opaque_dir.display(),
-                err
-            );
-        } else {
-            crate::scoped_log!(
-                debug,
-                "prepare",
-                "set overlay opaque: id={}, path={}",
-                module.id,
-                opaque_dir.display()
-            );
-        }
-    }
-
-    let backup_dst = final_dst
-        .parent()
-        .unwrap_or_else(|| Path::new("."))
-        .join(format!(".backup_{}", module.id));
-    remove_path(&backup_dst)?;
-
-    let mut backup_created = false;
-    if final_dst.exists() {
-        fs::rename(final_dst, &backup_dst).with_context(|| {
-            format!(
-                "failed to back up prepared module {} from {} to {}",
-                module.id,
-                final_dst.display(),
-                backup_dst.display()
-            )
-        })?;
-        backup_created = true;
-    }
-
-    if let Err(err) = fs::rename(tmp_dst, final_dst).with_context(|| {
-        format!(
-            "failed to commit prepared module {} from {} to {}",
-            module.id,
-            tmp_dst.display(),
-            final_dst.display()
-        )
-    }) {
-        if backup_created {
-            let _ = fs::rename(&backup_dst, final_dst);
-        }
-        return Err(err);
-    }
-
-    if backup_created && let Err(err) = remove_path(&backup_dst) {
-        crate::scoped_log!(
-            warn,
-            "prepare",
-            "cleanup backup failed: id={}, path={}, error={:#}",
-            module.id,
-            backup_dst.display(),
-            err
-        );
-    }
-
-    Ok(())
-}
-
 fn queue_overlay(
     plan: &mut ModulePlanOutcome,
     resolved_target: PathBuf,
@@ -692,40 +614,6 @@ fn merge_overlay_groups(
             .or_insert_with(|| (partition_name, Vec::new()));
         target_layers.append(&mut layers);
     }
-}
-
-fn prune_orphaned_modules(modules: &[Module], target_base: &Path) -> Result<()> {
-    if !target_base.exists() {
-        return Ok(());
-    }
-
-    let active_ids: HashSet<&str> = modules.iter().map(|module| module.id.as_str()).collect();
-
-    for entry in target_base.read_dir()?.flatten() {
-        let path = entry.path();
-        let name_os = entry.file_name();
-        let name = name_os.to_string_lossy();
-
-        if name != "lost+found"
-            && name != "hybrid_mount"
-            && !name.starts_with('.')
-            && !active_ids.contains(name.as_ref())
-        {
-            crate::scoped_log!(info, "prepare", "prune orphan: name={}", name);
-
-            if let Err(err) = remove_path(&path) {
-                crate::scoped_log!(
-                    warn,
-                    "prepare",
-                    "remove orphan failed: name={}, error={}",
-                    name,
-                    err
-                );
-            }
-        }
-    }
-
-    Ok(())
 }
 
 fn sorted_ids(ids: HashSet<String>) -> Vec<String> {
