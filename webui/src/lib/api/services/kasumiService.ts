@@ -1,4 +1,4 @@
-import { runDaemonCommand, runHybridMountJson } from "../core/bridge";
+import { runDaemonCommand } from "../core/bridge";
 import { DEFAULT_CONFIG, PATHS } from "../../constants";
 import type {
   KernelUnameValues,
@@ -9,10 +9,9 @@ import { patchConfigFile } from "../repos/configRepo";
 import { buildKasumiStatusFromPayload } from "../codec/runtimeCodec";
 import { AppError } from "../core/error";
 import { isRecord, isString } from "../core/guards";
-import { shellEscapeDoubleQuoted } from "../core/shell";
 
 async function applyKasumiRuntimeConfig(): Promise<void> {
-  await runHybridMountJson("kasumi apply-config-runtime", PATHS.BINARY);
+  await runDaemonCommand({ type: "kasumi-apply-config-runtime" }, PATHS.BINARY);
 }
 
 async function updateKasumiConfig(
@@ -26,7 +25,7 @@ async function updateKasumiConfig(
 }
 
 export async function getKasumiStatus(): Promise<KasumiStatus> {
-  const payload = await runHybridMountJson("kasumi status", PATHS.BINARY);
+  const payload = await runDaemonCommand({ type: "kasumi-status" }, PATHS.BINARY);
   const status = buildKasumiStatusFromPayload(
     payload,
     DEFAULT_CONFIG.kasumi,
@@ -53,7 +52,10 @@ export async function setKasumiDebug(enabled: boolean): Promise<void> {
 }
 
 export async function getOriginalKernelUname(): Promise<KernelUnameValues> {
-  const payload = await runHybridMountJson("api kernel-uname", PATHS.BINARY);
+  const payload = await runDaemonCommand(
+    { type: "api-kernel-uname" },
+    PATHS.BINARY,
+  );
   if (
     isRecord(payload) &&
     isString(payload.release) &&
@@ -127,7 +129,10 @@ export async function clearKasumiUname(
 }
 
 export async function restoreKasumiUnameGlobal(): Promise<void> {
-  await runHybridMountJson("kasumi restore-uname-global", PATHS.BINARY);
+  await runDaemonCommand(
+    { type: "kasumi-restore-uname-global" },
+    PATHS.BINARY,
+  );
 }
 
 export async function setKasumiCmdline(value: string): Promise<void> {
@@ -149,11 +154,11 @@ export async function addKasumiMapsRule(rule: {
 }
 
 export async function clearKasumiMapsRules(): Promise<void> {
-  await runHybridMountJson("api kasumi-maps-clear", PATHS.BINARY);
+  await runDaemonCommand({ type: "api-kasumi-maps-clear" }, PATHS.BINARY);
 }
 
 export async function getUserHideRules(): Promise<string[]> {
-  const payload = await runHybridMountJson("hide list", PATHS.BINARY);
+  const payload = await runDaemonCommand({ type: "hide-list" }, PATHS.BINARY);
   if (
     Array.isArray(payload) &&
     payload.every((item) => typeof item === "string")
@@ -164,29 +169,23 @@ export async function getUserHideRules(): Promise<string[]> {
 }
 
 export async function addUserHideRule(path: string): Promise<void> {
-  await runHybridMountJson(
-    `hide add "${shellEscapeDoubleQuoted(path)}"`,
-    PATHS.BINARY,
-  );
+  await runDaemonCommand({ type: "hide-add", path }, PATHS.BINARY);
 }
 
 export async function removeUserHideRule(path: string): Promise<void> {
-  await runHybridMountJson(
-    `hide remove "${shellEscapeDoubleQuoted(path)}"`,
-    PATHS.BINARY,
-  );
+  await runDaemonCommand({ type: "hide-remove", path }, PATHS.BINARY);
 }
 
 export async function applyUserHideRules(): Promise<void> {
-  await runHybridMountJson("hide apply", PATHS.BINARY);
+  await runDaemonCommand({ type: "hide-apply" }, PATHS.BINARY);
 }
 
 export async function loadKasumiLkm(): Promise<void> {
-  await runHybridMountJson("lkm load", PATHS.BINARY);
+  await runDaemonCommand({ type: "lkm-load" }, PATHS.BINARY);
 }
 
 export async function unloadKasumiLkm(): Promise<void> {
-  await runHybridMountJson("lkm unload", PATHS.BINARY);
+  await runDaemonCommand({ type: "lkm-unload" }, PATHS.BINARY);
 }
 
 export async function setKasumiLkmAutoload(enabled: boolean): Promise<void> {
@@ -205,19 +204,19 @@ export async function clearKasumiLkmKmi(): Promise<void> {
 }
 
 export async function fixKasumiMounts(): Promise<void> {
-  await runHybridMountJson("kasumi fix-mounts", PATHS.BINARY);
+  await runDaemonCommand({ type: "kasumi-fix-mounts" }, PATHS.BINARY);
 }
 
 export async function clearKasumiRules(): Promise<void> {
-  await runHybridMountJson("kasumi clear", PATHS.BINARY);
+  await runDaemonCommand({ type: "kasumi-clear" }, PATHS.BINARY);
 }
 
 export async function releaseKasumiConnection(): Promise<void> {
-  await runHybridMountJson("kasumi release-connection", PATHS.BINARY);
+  await runDaemonCommand({ type: "kasumi-release-connection" }, PATHS.BINARY);
 }
 
 export async function invalidateKasumiCache(): Promise<void> {
-  await runHybridMountJson("kasumi invalidate-cache", PATHS.BINARY);
+  await runDaemonCommand({ type: "kasumi-invalidate-cache" }, PATHS.BINARY);
 }
 
 export async function applyKasumiConfigRuntime(): Promise<void> {

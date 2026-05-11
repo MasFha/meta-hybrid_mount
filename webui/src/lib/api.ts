@@ -6,7 +6,6 @@ import {
   runDaemonCommand,
   shouldUseMock,
 } from "./api/core/bridge";
-import { shellEscapeDoubleQuoted } from "./api/core/shell";
 import {
   getStorageUsage,
   getSystemInfo,
@@ -82,7 +81,7 @@ const RealAPI: AppAPI = {
   reboot,
 };
 
-export { AppError, hasExecBridge, runDaemonCommand, shellEscapeDoubleQuoted };
+export { AppError, hasExecBridge, runDaemonCommand };
 export type { AppAPI } from "./api/contracts";
 export type { DaemonCommandPayload } from "./api/core/bridge";
 export const API: AppAPI = shouldUseMock

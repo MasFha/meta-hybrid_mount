@@ -15,7 +15,6 @@
 use std::{fs, path::PathBuf};
 
 use anyhow::{Context, Result};
-use humansize::{WINDOWS, format_size as format_human_size};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use procfs::process::Process;
 use rustix::fs::statvfs;
@@ -106,6 +105,23 @@ fn storage_mode_label(storage_mode: &str) -> String {
     }
 }
 
+fn format_windows_size(bytes: u64) -> String {
+    const UNITS: [&str; 7] = ["B", "kB", "MB", "GB", "TB", "PB", "EB"];
+
+    let mut value = bytes as f64;
+    let mut unit = 0;
+    while value >= 1024.0 && unit < UNITS.len() - 1 {
+        value /= 1024.0;
+        unit += 1;
+    }
+
+    if value.fract() == 0.0 {
+        format!("{value:.0} {}", UNITS[unit])
+    } else {
+        format!("{value:.2} {}", UNITS[unit])
+    }
+}
+
 pub fn build_storage_payload(state: &RuntimeState) -> StorageInfo {
     let mount_path = state.mount_point.clone();
     let path_str = mount_path.display().to_string();
@@ -130,9 +146,9 @@ pub fn build_storage_payload(state: &RuntimeState) -> StorageInfo {
             pid: state.pid,
             error: None,
             warning: (total_bytes == 0).then_some("Zero size detected".to_string()),
-            size: Some(format_human_size(total_bytes, WINDOWS)),
-            used: Some(format_human_size(used_bytes, WINDOWS)),
-            avail: Some(format_human_size(free_bytes, WINDOWS)),
+            size: Some(format_windows_size(total_bytes)),
+            used: Some(format_windows_size(used_bytes)),
+            avail: Some(format_windows_size(free_bytes)),
             percent: Some(percent),
             mode: Some(storage_mode_label(&state.storage_mode)),
         },
@@ -272,4 +288,18 @@ fn read_mount_entries() -> Result<Vec<MountEntry>> {
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 fn read_mount_entries() -> Result<Vec<MountEntry>> {
     Ok(Vec::new())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::format_windows_size;
+
+    #[test]
+    fn formats_windows_style_sizes() {
+        assert_eq!(format_windows_size(0), "0 B");
+        assert_eq!(format_windows_size(999), "999 B");
+        assert_eq!(format_windows_size(1024), "1 kB");
+        assert_eq!(format_windows_size(1536), "1.50 kB");
+        assert_eq!(format_windows_size(1024 * 1024), "1 MB");
+    }
 }

@@ -1,6 +1,6 @@
 import { PATHS } from "../../constants";
 import type { AppConfig } from "../../types";
-import { runDaemonCommand, runHybridMountJson } from "../core/bridge";
+import { runDaemonCommand } from "../core/bridge";
 import { isRecord } from "../core/guards";
 import { normalizeConfig } from "../codec/configCodec";
 
@@ -14,7 +14,10 @@ export function extractConfig(payload: unknown): AppConfig {
 }
 
 export async function loadConfigFromFile(): Promise<AppConfig> {
-  const payload = await runHybridMountJson("api config-get", PATHS.BINARY);
+  const payload = await runDaemonCommand(
+    { type: "api-config-get" },
+    PATHS.BINARY,
+  );
   return normalizeConfig(payload);
 }
 
@@ -49,6 +52,9 @@ export async function patchConfigFile(
 }
 
 export async function resetConfigFile(): Promise<AppConfig> {
-  const payload = await runHybridMountJson("api config-reset", PATHS.BINARY);
+  const payload = await runDaemonCommand(
+    { type: "api-config-reset" },
+    PATHS.BINARY,
+  );
   return extractConfig(payload);
 }

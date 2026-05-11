@@ -1,8 +1,7 @@
 import { PATHS } from "../../constants";
 import type { Module, ModuleRules } from "../../types";
-import { readModuleProp, runHybridMountJson } from "../core/bridge";
+import { readModuleProp, runDaemonCommand } from "../core/bridge";
 import { isBoolean, isRecord, isString } from "../core/guards";
-import { shellEscapeDoubleQuoted } from "../core/shell";
 import { normalizeMountMode, normalizeStringMap } from "../codec/configCodec";
 
 interface ModuleRuntimeEntry {
@@ -118,16 +117,18 @@ async function applyModulesPayload(modules: Module[]): Promise<void> {
       paths: normalizeStringMap(module.rules.paths),
     },
   }));
-  const encoded = shellEscapeDoubleQuoted(JSON.stringify(payload));
-  await runHybridMountJson(`api modules-apply "${encoded}"`, PATHS.BINARY);
+  await runDaemonCommand(
+    { type: "api-modules-apply", modules: payload },
+    PATHS.BINARY,
+  );
 }
 
 export async function scanModules(path?: string): Promise<Module[]> {
-  const suffix = path?.trim()
-    ? ` --path "${shellEscapeDoubleQuoted(path.trim())}"`
-    : "";
-  const payload = await runHybridMountJson(
-    `api modules-list${suffix}`,
+  const payload = await runDaemonCommand(
+    {
+      type: "api-modules-list",
+      path: path?.trim() || null,
+    },
     PATHS.BINARY,
   );
   if (!Array.isArray(payload)) {

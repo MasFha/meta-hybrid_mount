@@ -1,24 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../core/bridge", () => ({
-  runHybridMountJson: vi.fn(),
+  runDaemonCommand: vi.fn(),
   readModuleProp: vi.fn(),
 }));
 
-import { readModuleProp, runHybridMountJson } from "../core/bridge";
+import { readModuleProp, runDaemonCommand } from "../core/bridge";
 import { scanModules } from "./moduleService";
 
-const mockRunHybridMountJson = vi.mocked(runHybridMountJson);
+const mockRunDaemonCommand = vi.mocked(runDaemonCommand);
 const mockReadModuleProp = vi.mocked(readModuleProp);
 
 describe("scanModules", () => {
   beforeEach(() => {
-    mockRunHybridMountJson.mockReset();
+    mockRunDaemonCommand.mockReset();
     mockReadModuleProp.mockReset();
   });
 
   it("parses metadata from the real module.prop template shape", async () => {
-    mockRunHybridMountJson.mockResolvedValue([
+    mockRunDaemonCommand.mockResolvedValue([
       {
         id: "hybrid_mount",
         mode: "overlay",
@@ -62,7 +62,7 @@ webuiIcon=launcher.png
   });
 
   it("ignores comments and blank lines", async () => {
-    mockRunHybridMountJson.mockResolvedValue([
+    mockRunDaemonCommand.mockResolvedValue([
       {
         id: "example",
         mode: "magic",
@@ -93,7 +93,7 @@ author = Alice
   });
 
   it("falls back when metadata fields are missing or empty", async () => {
-    mockRunHybridMountJson.mockResolvedValue([
+    mockRunDaemonCommand.mockResolvedValue([
       {
         id: "fallback_mod",
         mode: "overlay",
@@ -119,7 +119,7 @@ author = Alice
   });
 
   it("falls back when reading module.prop fails", async () => {
-    mockRunHybridMountJson.mockResolvedValue([
+    mockRunDaemonCommand.mockResolvedValue([
       {
         id: "broken_mod",
         mode: "overlay",
@@ -145,7 +145,7 @@ author = Alice
   });
 
   it("keeps mount error details from the runtime payload", async () => {
-    mockRunHybridMountJson.mockResolvedValue([
+    mockRunDaemonCommand.mockResolvedValue([
       {
         id: "broken_mod",
         mode: "overlay",

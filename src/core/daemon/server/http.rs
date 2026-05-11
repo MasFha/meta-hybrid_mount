@@ -345,15 +345,15 @@ fn handle_http_request(
         .config_path
         .unwrap_or_else(|| PathBuf::from(defs::CONFIG_FILE));
     let effective_config = super::commands::load_runtime_config(&config_path)?;
-    let response = match super::commands::dispatch_command(
+    let ctx = super::commands::CommandContext::new(
         &effective_config,
         &config_path,
         state,
         shutdown,
         webui,
         sse_clients,
-        request.command,
-    ) {
+    );
+    let response = match super::commands::dispatch_command(&ctx, request.command) {
         Ok(payload) => DaemonResponse::success(payload),
         Err(err) => DaemonResponse::error(format!("{err}")),
     };

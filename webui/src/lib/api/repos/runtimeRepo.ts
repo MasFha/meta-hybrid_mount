@@ -43,10 +43,10 @@ export interface RuntimeKasumiPayload {
 import { PATHS } from "../../constants";
 import { AppError } from "../core/error";
 import { isRecord } from "../core/guards";
-import { runHybridMountJson } from "../core/bridge";
+import { runDaemonCommand } from "../core/bridge";
 
 export async function loadRuntimeState(): Promise<RuntimeStatePayload> {
-  const direct = await runHybridMountJson("daemon status", PATHS.BINARY);
+  const direct = await runDaemonCommand({ type: "status" }, PATHS.BINARY);
   if (!isRecord(direct)) {
     throw new AppError("daemon status returned invalid payload");
   }

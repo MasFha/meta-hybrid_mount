@@ -14,18 +14,12 @@
 
 use std::{
     path::Path,
-    sync::{
-        OnceLock,
-        atomic::{AtomicBool, Ordering},
-    },
+    sync::atomic::{AtomicBool, Ordering},
 };
 
 use anyhow::{Result, bail};
-use regex_lite::Regex;
 
 pub static KSU: AtomicBool = AtomicBool::new(false);
-
-static MODULE_ID_REGEX: OnceLock<Regex> = OnceLock::new();
 
 pub fn check_ksu() {
     #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -38,9 +32,14 @@ pub fn check_ksu() {
 }
 
 pub fn validate_module_id(module_id: &str) -> Result<()> {
-    let re = MODULE_ID_REGEX
-        .get_or_init(|| Regex::new(r"^[a-zA-Z][a-zA-Z0-9._-]+$").expect("Invalid Regex pattern"));
-    if re.is_match(module_id) {
+    let mut chars = module_id.bytes();
+    let valid = matches!(chars.next(), Some(b'a'..=b'z' | b'A'..=b'Z'))
+        && chars
+            .next()
+            .is_some_and(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+        && chars.all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'));
+
+    if valid {
         Ok(())
     } else {
         bail!("Invalid module ID: '{module_id}'. Must match /^[a-zA-Z][a-zA-Z0-9._-]+$/")

@@ -205,15 +205,15 @@ fn handle_stream(
         .config_path
         .unwrap_or_else(|| PathBuf::from(defs::CONFIG_FILE));
     let effective_config = commands::load_runtime_config(&config_path)?;
-    let payload = commands::dispatch_command(
+    let ctx = commands::CommandContext::new(
         &effective_config,
         &config_path,
         state,
         shutdown,
         webui,
         sse_clients,
-        request.command,
-    )?;
+    );
+    let payload = commands::dispatch_command(&ctx, request.command)?;
     write_response(stream, &DaemonResponse::success(payload))
 }
 

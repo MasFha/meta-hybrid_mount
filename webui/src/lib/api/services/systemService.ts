@@ -5,10 +5,8 @@ import {
   defaultVersion,
   hasExecBridge,
   runDaemonCommand,
-  runHybridMountJson,
 } from "../core/bridge";
 import { isBoolean, isRecord, isString, isStringArray } from "../core/guards";
-import { shellEscapeDoubleQuoted } from "../core/shell";
 import { buildModeStats, buildMountedCount } from "../codec/runtimeCodec";
 import { loadRuntimeState } from "../repos/runtimeRepo";
 
@@ -48,7 +46,10 @@ export async function getStorageUsage(): Promise<StorageStatus> {
 }
 
 export async function getSystemInfo(): Promise<SystemInfo> {
-  const payload = await runHybridMountJson("api system-info", PATHS.BINARY);
+  const payload = await runDaemonCommand(
+    { type: "api-system-info" },
+    PATHS.BINARY,
+  );
   if (!isRecord(payload)) {
     throw new Error("system info payload is invalid");
   }
@@ -71,7 +72,7 @@ export async function getSystemInfo(): Promise<SystemInfo> {
 }
 
 export async function getVersion(): Promise<string> {
-  const payload = await runHybridMountJson("api version", PATHS.BINARY);
+  const payload = await runDaemonCommand({ type: "api-version" }, PATHS.BINARY);
   if (
     isRecord(payload) &&
     isString(payload.version) &&
@@ -83,7 +84,7 @@ export async function getVersion(): Promise<string> {
 }
 
 export async function reboot(): Promise<void> {
-  await runHybridMountJson("api reboot", PATHS.BINARY);
+  await runDaemonCommand({ type: "api-reboot" }, PATHS.BINARY);
 }
 
 export async function openLink(url: string): Promise<void> {
@@ -91,6 +92,5 @@ export async function openLink(url: string): Promise<void> {
     window.open(url, "_blank", "noopener,noreferrer");
     return;
   }
-  const safeUrl = shellEscapeDoubleQuoted(url);
-  await runHybridMountJson(`api open-url "${safeUrl}"`, PATHS.BINARY);
+  await runDaemonCommand({ type: "api-open-url", url }, PATHS.BINARY);
 }

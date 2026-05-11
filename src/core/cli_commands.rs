@@ -48,59 +48,9 @@ pub fn run(cli: &Cli, command: &Commands) -> Result<()> {
     match command {
         Commands::GenConfig { output, force } => cli_handlers::handle_gen_config(output, *force),
         Commands::Logs { lines } => cli_handlers::handle_logs(*lines),
-        Commands::Api { command } => run_api_command(|| match command {
-            ApiCommands::Storage => dispatch(cli, DaemonCommand::ApiStorage),
-            ApiCommands::MountStats => dispatch(cli, DaemonCommand::ApiMountStats),
-            ApiCommands::MountTopology => dispatch(cli, DaemonCommand::ApiMountTopology),
-            ApiCommands::Partitions => dispatch(cli, DaemonCommand::ApiPartitions),
-            ApiCommands::SystemInfo => dispatch(cli, DaemonCommand::ApiSystemInfo),
-            ApiCommands::Version => dispatch(cli, DaemonCommand::ApiVersion),
-            ApiCommands::ConfigGet => dispatch(cli, DaemonCommand::ApiConfigGet),
-            ApiCommands::ConfigSet { config } => dispatch(
-                cli,
-                DaemonCommand::ApiConfigSet {
-                    config: serde_json::from_str(config)
-                        .context("Failed to parse config JSON payload")?,
-                },
-            ),
-            ApiCommands::ConfigPatch {
-                patch,
-                apply_runtime,
-            } => dispatch(
-                cli,
-                DaemonCommand::ApiConfigPatch {
-                    patch: serde_json::from_str(patch)
-                        .context("Failed to parse config patch JSON payload")?,
-                    apply_runtime: *apply_runtime,
-                },
-            ),
-            ApiCommands::ConfigReset => dispatch(cli, DaemonCommand::ApiConfigReset),
-            ApiCommands::ModulesList { path } => {
-                dispatch(cli, DaemonCommand::ApiModulesList { path: path.clone() })
-            }
-            ApiCommands::ModulesApply { modules } => dispatch(
-                cli,
-                DaemonCommand::ApiModulesApply {
-                    modules: serde_json::from_str(modules)
-                        .context("Failed to parse modules JSON payload")?,
-                },
-            ),
-            ApiCommands::Lkm => dispatch(cli, DaemonCommand::ApiLkm),
-            ApiCommands::Features => cli_handlers::handle_api_features(),
-            ApiCommands::Hooks => dispatch(cli, DaemonCommand::ApiHooks),
-            ApiCommands::KernelUname => dispatch(cli, DaemonCommand::ApiKernelUname),
-            ApiCommands::OpenUrl { url } => {
-                dispatch(cli, DaemonCommand::ApiOpenUrl { url: url.clone() })
-            }
-            ApiCommands::Reboot => dispatch(cli, DaemonCommand::ApiReboot),
-            ApiCommands::KasumiMapsAdd { rule } => dispatch(
-                cli,
-                DaemonCommand::ApiKasumiMapsAdd {
-                    rule: serde_json::from_str(rule)
-                        .context("Failed to parse Kasumi maps rule JSON payload")?,
-                },
-            ),
-            ApiCommands::KasumiMapsClear => dispatch(cli, DaemonCommand::ApiKasumiMapsClear),
+        Commands::Api { command } => run_api_command(|| match api_daemon_command(command)? {
+            Some(command) => dispatch(cli, command),
+            None => cli_handlers::handle_api_features(),
         }),
         Commands::Daemon { command } => match command {
             DaemonCommands::Launch => startup::run_and_serve(cli),
@@ -108,108 +58,144 @@ pub fn run(cli: &Cli, command: &Commands) -> Result<()> {
                 let config = loader::load_config(cli)?;
                 daemon::serve(config)
             }
-            DaemonCommands::Ping => run_api_command(|| dispatch(cli, DaemonCommand::Ping)),
-            DaemonCommands::WebuiStart => {
-                run_api_command(|| dispatch(cli, DaemonCommand::WebuiStart))
-            }
-            DaemonCommands::Stop => run_api_command(|| dispatch(cli, DaemonCommand::Shutdown)),
-            DaemonCommands::Status => run_api_command(|| dispatch(cli, DaemonCommand::Status)),
+            _ => run_api_command(|| dispatch(cli, daemon_daemon_command(command))),
         },
-        Commands::Lkm { command } => match command {
-            LkmCommands::Load => dispatch(cli, DaemonCommand::LkmLoad),
-            LkmCommands::Unload => dispatch(cli, DaemonCommand::LkmUnload),
-            LkmCommands::Status => dispatch(cli, DaemonCommand::LkmStatus),
+        Commands::Lkm { command } => dispatch(cli, lkm_daemon_command(command)),
+        Commands::Hide { command } => dispatch(cli, hide_daemon_command(command)),
+        Commands::Kasumi { command } => dispatch(cli, kasumi_daemon_command(command)),
+    }
+}
+
+fn api_daemon_command(command: &ApiCommands) -> Result<Option<DaemonCommand>> {
+    Ok(Some(match command {
+        ApiCommands::Storage => DaemonCommand::ApiStorage,
+        ApiCommands::MountStats => DaemonCommand::ApiMountStats,
+        ApiCommands::MountTopology => DaemonCommand::ApiMountTopology,
+        ApiCommands::Partitions => DaemonCommand::ApiPartitions,
+        ApiCommands::SystemInfo => DaemonCommand::ApiSystemInfo,
+        ApiCommands::Version => DaemonCommand::ApiVersion,
+        ApiCommands::ConfigGet => DaemonCommand::ApiConfigGet,
+        ApiCommands::ConfigSet { config } => DaemonCommand::ApiConfigSet {
+            config: parse_json(config, "Failed to parse config JSON payload")?,
         },
-        Commands::Hide { command } => match command {
-            HideCommands::List => dispatch(cli, DaemonCommand::HideList),
-            HideCommands::Add { path } => {
-                dispatch(cli, DaemonCommand::HideAdd { path: path.clone() })
-            }
-            HideCommands::Remove { path } => {
-                dispatch(cli, DaemonCommand::HideRemove { path: path.clone() })
-            }
-            HideCommands::Apply => dispatch(cli, DaemonCommand::HideApply),
+        ApiCommands::ConfigPatch {
+            patch,
+            apply_runtime,
+        } => DaemonCommand::ApiConfigPatch {
+            patch: parse_json(patch, "Failed to parse config patch JSON payload")?,
+            apply_runtime: *apply_runtime,
         },
-        Commands::Kasumi { command } => match command {
-            KasumiCommands::Status => dispatch(cli, DaemonCommand::KasumiStatus),
-            KasumiCommands::List => dispatch(cli, DaemonCommand::KasumiList),
-            KasumiCommands::Version => dispatch(cli, DaemonCommand::KasumiVersion),
-            KasumiCommands::Features => dispatch(cli, DaemonCommand::KasumiFeatures),
-            KasumiCommands::Hooks => dispatch(cli, DaemonCommand::KasumiHooks),
-            KasumiCommands::ApplyConfigRuntime => {
-                dispatch(cli, DaemonCommand::KasumiApplyConfigRuntime)
-            }
-            KasumiCommands::Clear => dispatch(cli, DaemonCommand::KasumiClear),
-            KasumiCommands::ReleaseConnection => {
-                dispatch(cli, DaemonCommand::KasumiReleaseConnection)
-            }
-            KasumiCommands::InvalidateCache => dispatch(cli, DaemonCommand::KasumiInvalidateCache),
-            KasumiCommands::FixMounts => dispatch(cli, DaemonCommand::KasumiFixMounts),
-            KasumiCommands::RestoreUnameGlobal => {
-                dispatch(cli, DaemonCommand::KasumiRestoreUnameGlobal)
-            }
-            KasumiCommands::SetUname {
-                mode,
-                release,
-                version,
-            } => dispatch(
-                cli,
-                DaemonCommand::KasumiSetUname {
-                    mode: mode.clone(),
-                    release: release.clone(),
-                    version: version.clone(),
-                },
-            ),
-            KasumiCommands::ClearUname { mode } => {
-                dispatch(cli, DaemonCommand::KasumiClearUname { mode: mode.clone() })
-            }
-            KasumiCommands::Rule { command } => match command {
-                KasumiRuleCommands::Add {
-                    target,
-                    source,
-                    file_type,
-                } => dispatch(
-                    cli,
-                    DaemonCommand::KasumiRuleAdd {
-                        target: target.clone(),
-                        source: source.clone(),
-                        file_type: *file_type,
-                    },
-                ),
-                KasumiRuleCommands::Merge { target, source } => dispatch(
-                    cli,
-                    DaemonCommand::KasumiRuleMerge {
-                        target: target.clone(),
-                        source: source.clone(),
-                    },
-                ),
-                KasumiRuleCommands::Hide { path } => {
-                    dispatch(cli, DaemonCommand::KasumiRuleHide { path: path.clone() })
-                }
-                KasumiRuleCommands::Delete { path } => {
-                    dispatch(cli, DaemonCommand::KasumiRuleDelete { path: path.clone() })
-                }
-                KasumiRuleCommands::AddDir {
-                    target_base,
-                    source_dir,
-                } => dispatch(
-                    cli,
-                    DaemonCommand::KasumiRuleAddDir {
-                        target_base: target_base.clone(),
-                        source_dir: source_dir.clone(),
-                    },
-                ),
-                KasumiRuleCommands::RemoveDir {
-                    target_base,
-                    source_dir,
-                } => dispatch(
-                    cli,
-                    DaemonCommand::KasumiRuleRemoveDir {
-                        target_base: target_base.clone(),
-                        source_dir: source_dir.clone(),
-                    },
-                ),
-            },
+        ApiCommands::ConfigReset => DaemonCommand::ApiConfigReset,
+        ApiCommands::ModulesList { path } => DaemonCommand::ApiModulesList { path: path.clone() },
+        ApiCommands::ModulesApply { modules } => DaemonCommand::ApiModulesApply {
+            modules: serde_json::from_str(modules)
+                .context("Failed to parse modules JSON payload")?,
+        },
+        ApiCommands::Lkm => DaemonCommand::ApiLkm,
+        ApiCommands::Features => return Ok(None),
+        ApiCommands::Hooks => DaemonCommand::ApiHooks,
+        ApiCommands::KernelUname => DaemonCommand::ApiKernelUname,
+        ApiCommands::OpenUrl { url } => DaemonCommand::ApiOpenUrl { url: url.clone() },
+        ApiCommands::Reboot => DaemonCommand::ApiReboot,
+        ApiCommands::KasumiMapsAdd { rule } => DaemonCommand::ApiKasumiMapsAdd {
+            rule: parse_json(rule, "Failed to parse Kasumi maps rule JSON payload")?,
+        },
+        ApiCommands::KasumiMapsClear => DaemonCommand::ApiKasumiMapsClear,
+    }))
+}
+
+fn daemon_daemon_command(command: &DaemonCommands) -> DaemonCommand {
+    match command {
+        DaemonCommands::Ping => DaemonCommand::Ping,
+        DaemonCommands::WebuiStart => DaemonCommand::WebuiStart,
+        DaemonCommands::Stop => DaemonCommand::Shutdown,
+        DaemonCommands::Status => DaemonCommand::Status,
+        DaemonCommands::Launch | DaemonCommands::Serve => unreachable!("handled before dispatch"),
+    }
+}
+
+fn lkm_daemon_command(command: &LkmCommands) -> DaemonCommand {
+    match command {
+        LkmCommands::Load => DaemonCommand::LkmLoad,
+        LkmCommands::Unload => DaemonCommand::LkmUnload,
+        LkmCommands::Status => DaemonCommand::LkmStatus,
+    }
+}
+
+fn hide_daemon_command(command: &HideCommands) -> DaemonCommand {
+    match command {
+        HideCommands::List => DaemonCommand::HideList,
+        HideCommands::Add { path } => DaemonCommand::HideAdd { path: path.clone() },
+        HideCommands::Remove { path } => DaemonCommand::HideRemove { path: path.clone() },
+        HideCommands::Apply => DaemonCommand::HideApply,
+    }
+}
+
+fn kasumi_daemon_command(command: &KasumiCommands) -> DaemonCommand {
+    match command {
+        KasumiCommands::Status => DaemonCommand::KasumiStatus,
+        KasumiCommands::List => DaemonCommand::KasumiList,
+        KasumiCommands::Version => DaemonCommand::KasumiVersion,
+        KasumiCommands::Features => DaemonCommand::KasumiFeatures,
+        KasumiCommands::Hooks => DaemonCommand::KasumiHooks,
+        KasumiCommands::ApplyConfigRuntime => DaemonCommand::KasumiApplyConfigRuntime,
+        KasumiCommands::Clear => DaemonCommand::KasumiClear,
+        KasumiCommands::ReleaseConnection => DaemonCommand::KasumiReleaseConnection,
+        KasumiCommands::InvalidateCache => DaemonCommand::KasumiInvalidateCache,
+        KasumiCommands::FixMounts => DaemonCommand::KasumiFixMounts,
+        KasumiCommands::RestoreUnameGlobal => DaemonCommand::KasumiRestoreUnameGlobal,
+        KasumiCommands::SetUname {
+            mode,
+            release,
+            version,
+        } => DaemonCommand::KasumiSetUname {
+            mode: mode.clone(),
+            release: release.clone(),
+            version: version.clone(),
+        },
+        KasumiCommands::ClearUname { mode } => {
+            DaemonCommand::KasumiClearUname { mode: mode.clone() }
+        }
+        KasumiCommands::Rule { command } => kasumi_rule_daemon_command(command),
+    }
+}
+
+fn kasumi_rule_daemon_command(command: &KasumiRuleCommands) -> DaemonCommand {
+    match command {
+        KasumiRuleCommands::Add {
+            target,
+            source,
+            file_type,
+        } => DaemonCommand::KasumiRuleAdd {
+            target: target.clone(),
+            source: source.clone(),
+            file_type: *file_type,
+        },
+        KasumiRuleCommands::Merge { target, source } => DaemonCommand::KasumiRuleMerge {
+            target: target.clone(),
+            source: source.clone(),
+        },
+        KasumiRuleCommands::Hide { path } => DaemonCommand::KasumiRuleHide { path: path.clone() },
+        KasumiRuleCommands::Delete { path } => {
+            DaemonCommand::KasumiRuleDelete { path: path.clone() }
+        }
+        KasumiRuleCommands::AddDir {
+            target_base,
+            source_dir,
+        } => DaemonCommand::KasumiRuleAddDir {
+            target_base: target_base.clone(),
+            source_dir: source_dir.clone(),
+        },
+        KasumiRuleCommands::RemoveDir {
+            target_base,
+            source_dir,
+        } => DaemonCommand::KasumiRuleRemoveDir {
+            target_base: target_base.clone(),
+            source_dir: source_dir.clone(),
         },
     }
+}
+
+fn parse_json(input: &str, context: &'static str) -> Result<serde_json::Value> {
+    serde_json::from_str(input).context(context)
 }

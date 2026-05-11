@@ -41,18 +41,15 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 toml = "1.1"
 walkdir = "2.5"
-regex-lite = "0.1"
 log = "0.4"
 flate2 = "1.1"
 fastrand = "2.4"
-const_format = "0.2"
 glob = "0.3"
 tempfile = "3.27"
-humansize = "2.1"
 signal-hook = "0.4"
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
-env_logger = "0.11.10"
+env_logger = { version = "0.11.10", default-features = false }
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 procfs = "0.18"
@@ -66,7 +63,7 @@ android_logger = "0.15"
 overflow-checks = true
 codegen-units = 1
 lto = "fat"
-opt-level = 3
+opt-level = "z"
 strip = true
 panic = "abort"
 
@@ -76,4 +73,3 @@ bindgen = "0.72"
 semver = "1"
 serde = { version = "1.0", features = ["serde_derive"] }
 toml = "1.1"
-const_format = "0.2"
