@@ -33,7 +33,7 @@ use crate::{
         ops::{
             executor::{self},
             plan::MountPlan,
-            planner, sync,
+            prepare,
         },
         recovery::{FailureStage, ModuleStageFailure},
         runtime_finalization,
@@ -45,11 +45,6 @@ pub struct Init;
 
 pub struct StorageReady {
     pub handle: StorageHandle,
-}
-
-pub struct ModulesReady {
-    pub handle: StorageHandle,
-    pub modules: Vec<inventory::Module>,
 }
 
 pub struct Planned {
@@ -119,10 +114,10 @@ impl MountController<Init> {
 }
 
 impl MountController<StorageReady> {
-    pub fn scan_and_sync(self) -> Result<MountController<ModulesReady>> {
+    pub fn scan_and_prepare_plan(self) -> Result<MountController<Planned>> {
         crate::scoped_log!(
             info,
-            "controller:scan_and_sync",
+            "controller:scan_and_prepare_plan",
             "scan start: moduledir={}",
             self.config.moduledir.display()
         );
@@ -130,22 +125,41 @@ impl MountController<StorageReady> {
 
         crate::scoped_log!(
             info,
-            "controller:scan_and_sync",
+            "controller:scan_and_prepare_plan",
             "scan complete: modules={}",
             modules.len()
         );
 
-        crate::scoped_log!(info, "controller:scan_and_sync", "sync start");
-        sync::perform_sync(&modules, self.state.handle.mount_point(), &self.config)?;
+        crate::scoped_log!(info, "controller:scan_and_prepare_plan", "prepare start");
+        let plan = prepare::prepare_mount_plan(
+            &self.config,
+            &modules,
+            self.state.handle.mount_point(),
+            &self.backend_capabilities,
+        )?;
+
+        crate::scoped_log!(
+            info,
+            "controller:scan_and_prepare_plan",
+            "prepare complete: overlay_ops={}, overlay_modules={}, magic_modules={}, kasumi_modules={}, kasumi_rule_compile=deferred",
+            plan.overlay_ops.len(),
+            plan.overlay_module_ids.len(),
+            plan.magic_module_ids.len(),
+            plan.kasumi_module_ids.len()
+        );
 
         let kasumi = KasumiCoordinator::new(&self.config);
         kasumi
-            .prepare_mirror_storage(&self.backend_capabilities, &modules)
+            .prepare_mirror_storage(
+                &self.backend_capabilities,
+                &modules,
+                &plan,
+                self.state.handle.mount_point(),
+            )
             .map_err(|err| {
-                let module_ids = KasumiCoordinator::requested_module_ids(&modules);
                 ModuleStageFailure::new(
                     FailureStage::Sync,
-                    module_ids,
+                    plan.kasumi_module_ids.clone(),
                     anyhow::anyhow!("Failed to prepare Kasumi mirror storage: {:#}", err),
                 )
             })?;
@@ -153,41 +167,9 @@ impl MountController<StorageReady> {
         Ok(MountController {
             config: self.config,
             backend_capabilities: self.backend_capabilities,
-            state: ModulesReady {
-                handle: self.state.handle,
-                modules,
-            },
-            tempdir: self.tempdir,
-        })
-    }
-}
-
-impl MountController<ModulesReady> {
-    pub fn generate_plan(self) -> Result<MountController<Planned>> {
-        crate::scoped_log!(info, "controller:generate_plan", "start");
-        let plan = planner::generate(
-            &self.config,
-            &self.state.modules,
-            self.state.handle.mount_point(),
-            &self.backend_capabilities,
-        )?;
-
-        crate::scoped_log!(
-            info,
-            "controller:generate_plan",
-            "complete: overlay_ops={}, overlay_modules={}, magic_modules={}, kasumi_modules={}, kasumi_rule_compile=deferred",
-            plan.overlay_ops.len(),
-            plan.overlay_module_ids.len(),
-            plan.magic_module_ids.len(),
-            plan.kasumi_module_ids.len()
-        );
-
-        Ok(MountController {
-            config: self.config,
-            backend_capabilities: self.backend_capabilities,
             state: Planned {
                 handle: self.state.handle,
-                modules: self.state.modules,
+                modules,
                 plan,
             },
             tempdir: self.tempdir,

@@ -23,7 +23,7 @@ use crate::{
         recovery::{FailureStage, ModuleStageFailure},
     },
     partitions,
-    sys::fs::{prune_empty_dirs, set_overlay_opaque, sync_dir},
+    sys::fs::{prune_empty_dirs, remove_path, set_overlay_opaque, sync_dir},
 };
 
 pub fn perform_sync(
@@ -196,21 +196,11 @@ fn prune_orphaned_modules(modules: &[Module], target_base: &Path) -> Result<()> 
         {
             crate::scoped_log!(info, "sync", "prune orphan: name={}", name);
 
-            if path.is_dir() {
-                if let Err(e) = fs::remove_dir_all(&path) {
-                    crate::scoped_log!(
-                        warn,
-                        "sync",
-                        "remove orphan dir failed: name={}, error={}",
-                        name,
-                        e
-                    );
-                }
-            } else if let Err(e) = fs::remove_file(&path) {
+            if let Err(e) = remove_path(&path) {
                 crate::scoped_log!(
                     warn,
                     "sync",
-                    "remove orphan file failed: name={}, error={}",
+                    "remove orphan failed: name={}, error={}",
                     name,
                     e
                 );

@@ -14,5 +14,5 @@
 
 pub mod executor;
 pub mod plan;
-pub mod planner;
+pub mod prepare;
 pub mod sync;

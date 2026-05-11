@@ -44,10 +44,8 @@ pub fn run(config: Config) -> Result<Config> {
             MountController::new(config.clone(), &mnt_base)
                 .init_storage(&mnt_base)
                 .context("Failed to initialize storage")?
-                .scan_and_sync()
-                .context("Failed to scan and sync modules")?
-                .generate_plan()
-                .context("Failed to generate mount plan")?
+                .scan_and_prepare_plan()
+                .context("Failed to scan modules and prepare mount plan")?
                 .execute()
                 .context("Failed to execute mount plan")?
                 .finalize()

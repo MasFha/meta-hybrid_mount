@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::path::{Path, PathBuf};
+use std::{collections::HashSet, path::Path};
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 
 use crate::{
     conf::config::{Config, OverlayMode},
@@ -57,14 +57,6 @@ impl<'a> KasumiCoordinator<'a> {
         modules.iter().any(Self::module_requests_kasumi)
     }
 
-    pub fn requested_module_ids(modules: &[Module]) -> Vec<String> {
-        modules
-            .iter()
-            .filter(|module| Self::module_requests_kasumi(module))
-            .map(|module| module.id.clone())
-            .collect()
-    }
-
     pub fn planning_state(
         &self,
         capabilities: &BackendCapabilities,
@@ -76,36 +68,49 @@ impl<'a> KasumiCoordinator<'a> {
         }
     }
 
-    pub fn backend_requested(
-        &self,
-        capabilities: &BackendCapabilities,
-        modules: &[Module],
-    ) -> bool {
-        let planning = self.planning_state(capabilities, modules);
-        planning.requested && planning.available
-    }
-
-    pub fn kasumi_modules<'m>(&self, modules: &'m [Module]) -> Vec<&'m Module> {
-        modules
-            .iter()
-            .filter(|module| Self::module_requests_kasumi(module))
-            .collect()
-    }
-
     pub fn prepare_mirror_storage(
         &self,
         capabilities: &BackendCapabilities,
         modules: &[Module],
+        plan: &MountPlan,
+        source_base: &Path,
     ) -> Result<()> {
-        if !self.backend_requested(capabilities, modules) {
+        if !capabilities.can_use_kasumi() || plan.kasumi_module_ids.is_empty() {
             return Ok(());
         }
 
-        let kasumi_modules = self.kasumi_modules(modules);
+        let kasumi_ids: HashSet<&str> = plan.kasumi_module_ids.iter().map(String::as_str).collect();
+        let mut kasumi_modules = Vec::new();
+        for module in modules {
+            if !kasumi_ids.contains(module.id.as_str()) {
+                continue;
+            }
+            let source_path = source_base.join(&module.id);
+            if !source_path.exists() {
+                bail!(
+                    "planned Kasumi module {} is missing prepared storage at {}",
+                    module.id,
+                    source_path.display()
+                );
+            }
+            kasumi_modules.push(Module {
+                id: module.id.clone(),
+                source_path,
+                rules: module.rules.clone(),
+            });
+        }
+        if kasumi_modules.len() != plan.kasumi_module_ids.len() {
+            bail!(
+                "planned Kasumi modules are not present in inventory: expected={}, found={}",
+                plan.kasumi_module_ids.len(),
+                kasumi_modules.len()
+            );
+        }
+
         let kasumi_sources = kasumi_modules
             .iter()
             .map(|module| module.source_path.clone())
-            .collect::<Vec<PathBuf>>();
+            .collect::<Vec<_>>();
 
         crate::scoped_log!(
             info,
@@ -124,7 +129,6 @@ impl<'a> KasumiCoordinator<'a> {
             Path::new(defs::KASUMI_IMG_FILE),
         )?;
 
-        let kasumi_modules = kasumi_modules.into_iter().cloned().collect::<Vec<_>>();
         sync::perform_sync(&kasumi_modules, kasumi_storage.mount_point(), self.config)?;
 
         crate::scoped_log!(

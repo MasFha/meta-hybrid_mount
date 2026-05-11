@@ -96,6 +96,55 @@ pub fn reflink_or_copy(src: &Path, dest: &Path) -> Result<u64> {
     fs::copy(src, dest).map_err(|e| e.into())
 }
 
+pub fn remove_path(path: &Path) -> Result<()> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_dir() => {
+            fs::remove_dir_all(path).map_err(|err| err.into())
+        }
+        Ok(_) => fs::remove_file(path).map_err(|err| err.into()),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(err.into()),
+    }
+}
+
+pub fn ensure_dir_like(src: &Path, dst: &Path) -> Result<()> {
+    if !dst.exists() {
+        fs::create_dir_all(dst)?;
+        if let Ok(src_meta) = src.metadata() {
+            let _ = fs::set_permissions(dst, src_meta.permissions());
+        }
+        clone_ownership(src, dst);
+        clone_selinux_context(src, dst);
+    }
+    Ok(())
+}
+
+pub fn copy_non_dir_entry(
+    src: &Path,
+    dst: &Path,
+    metadata: &fs::Metadata,
+    file_type: &fs::FileType,
+) -> Result<()> {
+    remove_path(dst)?;
+    if file_type.is_symlink() {
+        let link_target = fs::read_link(src)?;
+        symlink(&link_target, dst)?;
+        clone_ownership(src, dst);
+        clone_selinux_context(src, dst);
+    } else if file_type.is_char_device() || file_type.is_block_device() || file_type.is_fifo() {
+        let mode = metadata.permissions().mode();
+        let rdev = metadata.rdev();
+        make_device_node(dst, mode, rdev)?;
+        clone_ownership(src, dst);
+        clone_selinux_context(src, dst);
+    } else {
+        reflink_or_copy(src, dst)?;
+        clone_ownership(src, dst);
+        clone_selinux_context(src, dst);
+    }
+    Ok(())
+}
+
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn clone_selinux_context(src: &Path, dst: &Path) {
     match lgetfilecon(src).and_then(|con| lsetfilecon(dst, &con)) {
@@ -103,7 +152,7 @@ fn clone_selinux_context(src: &Path, dst: &Path) {
         Err(err) => {
             crate::scoped_log!(
                 warn,
-                "sync",
+                "fs:copy",
                 "clone selinux context skipped: src={}, dst={}, error={:#}",
                 src.display(),
                 dst.display(),
@@ -123,7 +172,7 @@ fn clone_ownership(src: &Path, dst: &Path) {
         Err(err) => {
             crate::scoped_log!(
                 warn,
-                "sync",
+                "fs:copy",
                 "clone ownership skipped: src={}, dst={}, error={}",
                 src.display(),
                 dst.display(),
@@ -139,7 +188,7 @@ fn clone_ownership(src: &Path, dst: &Path) {
             Err(err) => {
                 crate::scoped_log!(
                     warn,
-                    "sync",
+                    "fs:copy",
                     "clone ownership skipped: src={}, dst={}, error={}",
                     src.display(),
                     dst.display(),
@@ -174,7 +223,7 @@ fn clone_ownership(src: &Path, dst: &Path) {
     if let Err(err) = result {
         crate::scoped_log!(
             warn,
-            "sync",
+            "fs:copy",
             "clone ownership skipped: src={}, dst={}, uid={}, gid={}, error={}",
             src.display(),
             dst.display(),
@@ -227,16 +276,7 @@ fn native_cp_r(
     visited: &mut HashSet<(u64, u64)>,
     stats: &mut SyncDirStats,
 ) -> Result<()> {
-    if !dst.exists() {
-        if src.is_dir() {
-            fs::create_dir_all(dst)?;
-        }
-        if let Ok(src_meta) = src.metadata() {
-            let _ = fs::set_permissions(dst, src_meta.permissions());
-        }
-        clone_ownership(src, dst);
-        clone_selinux_context(src, dst);
-    }
+    ensure_dir_like(src, dst)?;
 
     for entry in fs::read_dir(src)? {
         let entry = entry?;
@@ -270,27 +310,8 @@ fn native_cp_r(
                 visited,
                 stats,
             )?;
-        } else if ft.is_symlink() {
-            if dst_path.exists() {
-                fs::remove_file(&dst_path)?;
-            }
-            let link_target = fs::read_link(&src_path)?;
-            symlink(&link_target, &dst_path)?;
-            clone_ownership(&src_path, &dst_path);
-            clone_selinux_context(&src_path, &dst_path);
-        } else if ft.is_char_device() || ft.is_block_device() || ft.is_fifo() {
-            if dst_path.exists() {
-                fs::remove_file(&dst_path)?;
-            }
-            let mode = metadata.permissions().mode();
-            let rdev = metadata.rdev();
-            make_device_node(&dst_path, mode, rdev)?;
-            clone_ownership(&src_path, &dst_path);
-            clone_selinux_context(&src_path, &dst_path);
         } else {
-            reflink_or_copy(&src_path, &dst_path)?;
-            clone_ownership(&src_path, &dst_path);
-            clone_selinux_context(&src_path, &dst_path);
+            copy_non_dir_entry(&src_path, &dst_path, &metadata, &ft)?;
         }
     }
     Ok(())
