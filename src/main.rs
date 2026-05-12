@@ -15,7 +15,9 @@
 use anyhow::Result;
 #[cfg(feature = "control-plane")]
 use clap::Parser;
-use hybrid_mount::{conf::cli::Cli, core};
+#[cfg(feature = "control-plane")]
+use hybrid_mount::conf::cli::Cli;
+use hybrid_mount::core;
 
 fn main() -> Result<()> {
     if matches!(std::env::var("KSU_LATE_LOAD").as_deref(), Ok("1")) {
