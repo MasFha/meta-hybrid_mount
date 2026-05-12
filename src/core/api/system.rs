@@ -70,6 +70,7 @@ pub struct SystemInfoPayload {
     pub selinux: String,
     pub mount_base: String,
     pub active_mounts: Vec<String>,
+    #[cfg(feature = "control-plane")]
     pub tmpfs_xattr_supported: bool,
     pub supported_overlay_modes: Vec<String>,
 }
@@ -180,6 +181,7 @@ pub fn build_system_info_payload(state: &RuntimeState) -> SystemInfoPayload {
         selinux: read_selinux_status().unwrap_or_else(|_| "Unknown".to_string()),
         mount_base: state.mount_point.display().to_string(),
         active_mounts: state.active_mounts.clone(),
+        #[cfg(feature = "control-plane")]
         tmpfs_xattr_supported: state.tmpfs_xattr_supported,
         supported_overlay_modes: vec!["tmpfs".to_string(), "ext4".to_string()],
     }

@@ -33,8 +33,11 @@ mod zip_ext;
 use crate::zip_ext::zip_create_from_directory_with_options;
 
 const KASUMI_LKM_STAGE_DIR: &str = "kasumi_lkm";
+const NANO_MARKER_FILE: &str = ".nano";
 const DEFAULT_LITE_UPDATE_JSON: &str =
     "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/main/update-lite.json";
+const DEFAULT_NANO_UPDATE_JSON: &str =
+    "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/main/update-nano.json";
 
 #[derive(Debug, Clone, Copy, ValueEnum, PartialEq)]
 enum Arch {
@@ -46,6 +49,7 @@ enum Arch {
 enum BuildFlavor {
     Full,
     Lite,
+    Nano,
 }
 
 impl BuildFlavor {
@@ -53,6 +57,7 @@ impl BuildFlavor {
         match self {
             Self::Full => "full",
             Self::Lite => "lite",
+            Self::Nano => "nano",
         }
     }
 
@@ -60,6 +65,7 @@ impl BuildFlavor {
         match self {
             Self::Full => format!("Hybrid-Mount-{version}"),
             Self::Lite => format!("Hybrid-Mount-lite-{version}"),
+            Self::Nano => format!("Hybrid-Mount-nano-{version}"),
         }
     }
 
@@ -71,6 +77,11 @@ impl BuildFlavor {
                 .clone()
                 .filter(|name| !name.trim().is_empty())
                 .unwrap_or_else(|| format!("{} Lite", meta.name)),
+            Self::Nano => meta
+                .nano_name
+                .clone()
+                .filter(|name| !name.trim().is_empty())
+                .unwrap_or_else(|| format!("{} Nano", meta.name)),
         }
     }
 
@@ -82,6 +93,11 @@ impl BuildFlavor {
                 .clone()
                 .filter(|url| !url.trim().is_empty())
                 .unwrap_or_else(|| DEFAULT_LITE_UPDATE_JSON.to_string()),
+            Self::Nano => meta
+                .nano_update
+                .clone()
+                .filter(|url| !url.trim().is_empty())
+                .unwrap_or_else(|| DEFAULT_NANO_UPDATE_JSON.to_string()),
         }
     }
 
@@ -89,8 +105,16 @@ impl BuildFlavor {
         matches!(self, Self::Full)
     }
 
+    fn includes_webui(self) -> bool {
+        !matches!(self, Self::Nano)
+    }
+
     fn enable_kasumi(self) -> bool {
         matches!(self, Self::Full)
+    }
+
+    fn enable_control_plane(self) -> bool {
+        !matches!(self, Self::Nano)
     }
 }
 
@@ -244,7 +268,7 @@ fn build_package(
     }
     fs::create_dir_all(&stage_dir)?;
 
-    if !skip_webui {
+    if flavor.includes_webui() && !skip_webui {
         build_webui(&version_info.clean_version, webui_release, flavor)?;
     }
 
@@ -270,6 +294,8 @@ fn build_package(
     let module_src = Path::new("module");
     let options = dir::CopyOptions::new().overwrite(true).content_only(true);
     dir::copy(module_src, &stage_dir, &options)?;
+    prune_flavor_assets(&stage_dir, flavor)?;
+    configure_flavor_config(&stage_dir, flavor)?;
     if flavor.includes_kasumi_lkm() {
         stage_kasumi_lkm_assets(&stage_dir)?;
     }
@@ -292,6 +318,62 @@ fn build_package(
 
     maybe_notify_build(output_dir, notify_plan)?;
 
+    Ok(())
+}
+
+fn prune_flavor_assets(stage_dir: &Path, flavor: BuildFlavor) -> Result<()> {
+    if flavor.includes_webui() {
+        return Ok(());
+    }
+
+    remove_path_if_exists(&stage_dir.join("webroot"))?;
+    remove_path_if_exists(&stage_dir.join("launcher.png"))?;
+    remove_path_if_exists(&stage_dir.join("service.sh"))?;
+    fs::write(stage_dir.join(NANO_MARKER_FILE), b"nano\n")?;
+    Ok(())
+}
+
+fn configure_flavor_config(stage_dir: &Path, flavor: BuildFlavor) -> Result<()> {
+    if !matches!(flavor, BuildFlavor::Nano) {
+        return Ok(());
+    }
+
+    let config_path = stage_dir.join("config.toml");
+    let content = fs::read_to_string(&config_path)
+        .with_context(|| format!("failed to read staged config {}", config_path.display()))?;
+    let mut value = content
+        .parse::<toml::Value>()
+        .with_context(|| format!("failed to parse staged config {}", config_path.display()))?;
+    let table = value
+        .as_table_mut()
+        .ok_or_else(|| anyhow::anyhow!("staged config root is not a table"))?;
+    table.insert(
+        "default_mode".to_string(),
+        toml::Value::String("magic".to_string()),
+    );
+    table.insert(
+        "overlay_whitelist".to_string(),
+        toml::Value::Array(
+            build_meta_shared::defs::NANO_OVERLAY_WHITELIST
+                .iter()
+                .map(|path| toml::Value::String((*path).to_string()))
+                .collect(),
+        ),
+    );
+    fs::write(&config_path, toml::to_string_pretty(&value)?)
+        .with_context(|| format!("failed to write staged config {}", config_path.display()))?;
+    Ok(())
+}
+
+fn remove_path_if_exists(path: &Path) -> Result<()> {
+    if !path.exists() {
+        return Ok(());
+    }
+    if path.is_dir() {
+        fs::remove_dir_all(path)?;
+    } else {
+        fs::remove_file(path)?;
+    }
     Ok(())
 }
 
@@ -474,6 +556,7 @@ fn generate_module_prop(stage_dir: &Path, info: &VersionInfo, flavor: BuildFlavo
         author: "Hybrid Mount Developers",
         description: &config.package.description,
         update_json: &update_json,
+        webui_icon: flavor.includes_webui(),
     });
 
     let prop_path = stage_dir.join("module.prop");
@@ -547,6 +630,9 @@ fn compile_core(release: bool, _arch: Arch, flavor: BuildFlavor) -> Result<()> {
     }
     if !flavor.enable_kasumi() {
         cmd.arg("--no-default-features");
+    }
+    if flavor.enable_control_plane() && !flavor.enable_kasumi() {
+        cmd.args(["--features", "control-plane"]);
     }
     let mut ret = cmd.spawn()?;
     let status = ret.wait()?;

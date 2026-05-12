@@ -24,11 +24,10 @@ use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "kasumi")]
 use crate::mount::kasumi;
+#[cfg(feature = "control-plane")]
+use crate::sys::fs::xattr;
 use crate::{
-    conf::config::Config,
-    core::ops::executor::ExecutionResult,
-    defs,
-    sys::fs::{atomic_write, xattr},
+    conf::config::Config, core::ops::executor::ExecutionResult, defs, sys::fs::atomic_write,
 };
 
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
@@ -91,6 +90,7 @@ impl MountStatistics {
         self.ignored_entries += 1;
     }
 
+    #[cfg(feature = "control-plane")]
     pub fn success_rate(&self) -> f64 {
         if self.total_mounts == 0 {
             0.0
@@ -182,6 +182,7 @@ pub struct RuntimeState {
     pub skip_mount_modules: Vec<String>,
     #[serde(default)]
     pub active_mounts: Vec<String>,
+    #[cfg(feature = "control-plane")]
     #[serde(default)]
     pub tmpfs_xattr_supported: bool,
     #[serde(default)]
@@ -197,6 +198,7 @@ pub struct RuntimeState {
 }
 
 impl RuntimeState {
+    #[cfg(feature = "control-plane")]
     pub fn status_value(&mut self) -> serde_json::Result<&serde_json::Value> {
         if self.cached_status_value.is_none() {
             self.cached_status_value = Some(serde_json::to_value(&*self)?);
@@ -234,6 +236,7 @@ impl RuntimeState {
 
         let pid = std::process::id();
 
+        #[cfg(feature = "control-plane")]
         let tmpfs_xattr_supported = xattr::is_overlay_xattr_supported().unwrap_or(false);
 
         let state = Self {
@@ -248,6 +251,7 @@ impl RuntimeState {
             mount_error_reasons: BTreeMap::new(),
             skip_mount_modules: Vec::new(),
             active_mounts,
+            #[cfg(feature = "control-plane")]
             tmpfs_xattr_supported,
             mount_stats,
             mode_stats,
@@ -256,6 +260,7 @@ impl RuntimeState {
             cached_status_value: None,
         };
 
+        #[cfg(feature = "control-plane")]
         crate::scoped_log!(
             debug,
             "runtime_state:new",
@@ -267,6 +272,18 @@ impl RuntimeState {
             state.kasumi_modules.len(),
             state.active_mounts.len(),
             state.tmpfs_xattr_supported
+        );
+        #[cfg(not(feature = "control-plane"))]
+        crate::scoped_log!(
+            debug,
+            "runtime_state:new",
+            "complete: storage_mode={}, mount_point={}, overlay_modules={}, magic_modules={}, kasumi_modules={}, active_mounts={}",
+            state.storage_mode,
+            state.mount_point.display(),
+            state.overlay_modules.len(),
+            state.magic_modules.len(),
+            state.kasumi_modules.len(),
+            state.active_mounts.len()
         );
 
         state
@@ -395,6 +412,7 @@ impl RuntimeState {
             .collect()
     }
 
+    #[cfg(feature = "control-plane")]
     pub fn set_daemon_state(&mut self, alive: bool, socket_path: impl Into<String>) {
         let refreshed_at = SystemTime::now()
             .duration_since(UNIX_EPOCH)

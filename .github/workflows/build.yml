@@ -71,6 +71,7 @@ jobs:
         flavor:
           - full
           - lite
+          - nano
     container:
       image: ghcr.io/hybrid-mount/meta-hybrid_mount-ci:latest
       credentials:
@@ -144,9 +145,7 @@ jobs:
 
       - name: Build All
         env:
-          HYBRID_MOUNT_NOTIFY: ${{ github.event_name != 'pull_request' && '1' || '0' }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          HYBRID_MOUNT_NOTIFY: "0"
         run: |
           if [ "${{ matrix.flavor }}" = "full" ]; then
             ls -la "$HYBRID_MOUNT_KASUMI_LKM_DIR"
@@ -163,6 +162,7 @@ jobs:
           ARTIFACT_NAME="${ZIP_FILENAME%.*}"
           VERSION="${ARTIFACT_NAME#Hybrid-Mount-}"
           VERSION="${VERSION#lite-}"
+          VERSION="${VERSION#nano-}"
           
           echo "ZIP_PATH=$ZIP_PATH" >> "$GITHUB_ENV"
           echo "ARTIFACT_NAME=$ARTIFACT_NAME" >> "$GITHUB_ENV"
@@ -174,3 +174,52 @@ jobs:
           name: ${{ env.ARTIFACT_NAME }}
           path: ${{ env.ZIP_PATH }}
           if-no-files-found: error
+
+  notify:
+    needs: build
+    if: github.event_name != 'pull_request'
+    name: Notify packages
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: ghcr.io/hybrid-mount/meta-hybrid_mount-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Trust checkout directory
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Download package artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: notify-output
+          pattern: Hybrid-Mount-*
+          merge-multiple: true
+
+      - name: Notify Telegram
+        env:
+          HYBRID_MOUNT_NOTIFY: "1"
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          set -euo pipefail
+          mapfile -t ZIP_FILES < <(find notify-output -maxdepth 1 -type f -name '*.zip' | sort)
+          if [ "${#ZIP_FILES[@]}" -ne 3 ]; then
+            echo "Expected 3 package artifacts, found ${#ZIP_FILES[@]}:"
+            find notify-output -maxdepth 2 -type f -print | sort
+            exit 1
+          fi
+          cargo xtask notify \
+            --output notify-output \
+            --label "日常耕作 🌱 (Daily Tilling) [full+lite+nano] - ${{ github.ref_name }}" \
+            --topic-id 37

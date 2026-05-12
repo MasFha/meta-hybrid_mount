@@ -18,6 +18,7 @@ use anyhow::{Context, Result};
 
 use crate::conf::schema::Config;
 
+#[cfg(feature = "control-plane")]
 fn ensure_parent_dir(path: &Path) -> Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).context("failed to create config directory")?;
@@ -63,6 +64,7 @@ impl Config {
         load_merged_config(path.as_ref())
     }
 
+    #[cfg(feature = "control-plane")]
     pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         let main_path = path.as_ref();
         let content = toml::to_string_pretty(self).context("failed to serialize config")?;

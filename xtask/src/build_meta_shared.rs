@@ -49,6 +49,8 @@ pub struct HybridMountMetadata {
     pub update: String,
     pub lite_name: Option<String>,
     pub lite_update: Option<String>,
+    pub nano_name: Option<String>,
+    pub nano_update: Option<String>,
 }
 
 pub struct ModulePropData<'a> {
@@ -59,6 +61,7 @@ pub struct ModulePropData<'a> {
     pub author: &'a str,
     pub description: &'a str,
     pub update_json: &'a str,
+    pub webui_icon: bool,
 }
 
 pub fn calculate_version_code(version_str: &str) -> Result<String> {
@@ -85,8 +88,8 @@ pub fn git_commit_count() -> Result<i32> {
 }
 
 pub fn render_module_prop(data: &ModulePropData<'_>) -> String {
-    format!(
-        "id={}\nname={}\nversion={}\nversionCode={}\nauthor={}\ndescription={}\nupdateJson={}\nmetamodule=1\nwebuiIcon=launcher.png\n",
+    let mut content = format!(
+        "id={}\nname={}\nversion={}\nversionCode={}\nauthor={}\ndescription={}\nupdateJson={}\nmetamodule=1\n",
         data.id,
         data.name,
         data.version,
@@ -94,7 +97,11 @@ pub fn render_module_prop(data: &ModulePropData<'_>) -> String {
         data.author,
         data.description,
         data.update_json,
-    )
+    );
+    if data.webui_icon {
+        content.push_str("webuiIcon=launcher.png\n");
+    }
+    content
 }
 
 #[allow(dead_code)]

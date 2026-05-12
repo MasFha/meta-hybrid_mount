@@ -29,6 +29,11 @@ case "$ARCH" in
   ;;
 esac
 ui_print "- Device Architecture: $ARCH"
+NANO_MODE=false
+if [ -f "$MODPATH/.nano" ]; then
+  NANO_MODE=true
+  ui_print "- Flavor: Nano (config-only)"
+fi
 BIN_SOURCE="$MODPATH/binaries/hybrid-mount"
 BIN_TARGET="$MODPATH/hybrid-mount"
 if [ ! -f "$BIN_SOURCE" ]; then
@@ -39,6 +44,9 @@ cp -f "$BIN_SOURCE" "$BIN_TARGET"
 set_perm "$BIN_TARGET" 0 0 0755
 rm -rf "$MODPATH/binaries"
 rm -rf "$MODPATH/system"
+if [ "$NANO_MODE" = "true" ]; then
+  rm -rf "$MODPATH/webroot" "$MODPATH/launcher.png" "$MODPATH/service.sh"
+fi
 BASE_DIR="/data/adb/hybrid-mount"
 mkdir -p "$BASE_DIR"
 
@@ -124,8 +132,12 @@ if [ ! -f "$BASE_DIR/config.toml" ]; then
   ui_print "- Fresh installation detected"
   ui_print "- Installing default config..."
   cat "$MODPATH/config.toml" >"$BASE_DIR/config.toml"
-  show_usage_notice_and_confirm
-  KEY_volume_detect
+  if [ "$NANO_MODE" = "true" ]; then
+    ui_print "- Nano mode uses config.toml only; skipping setup wizard"
+  else
+    show_usage_notice_and_confirm
+    KEY_volume_detect
+  fi
 else
   ui_print "- Existing config found"
   ui_print "- Skipping setup wizard to preserve settings"

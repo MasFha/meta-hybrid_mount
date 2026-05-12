@@ -16,7 +16,7 @@ It merges module files into Android partitions through a unified policy engine b
 
 A built-in **SolidJS WebUI** provides graphical management, live state monitoring, and configuration editing.
 
-Releases are published in two flavors: `full` includes Kasumi end to end, while `lite` strips Kasumi from the backend, WebUI, and bundled assets. Unless noted otherwise, the rest of this README describes the `full` build.
+Releases are published in three flavors: `full` includes Kasumi end to end, `lite` strips Kasumi, and `nano` is config-only with no WebUI/CLI/daemon control plane. Unless noted otherwise, the rest of this README describes the `full` build.
 
 **[🇨🇳 中文文档](README_ZH.md)**
 
@@ -404,6 +404,9 @@ cargo run -p xtask -- build --release --flavor full
 # Lite release package (binary + WebUI, no Kasumi) → output/
 cargo run -p xtask -- build --release --flavor lite
 
+# Nano release package (config-only, no WebUI/CLI/daemon) → output/
+cargo run -p xtask -- build --release --flavor nano
+
 # Binary only (skip WebUI)
 cargo run -p xtask -- build --release --skip-webui
 
@@ -412,6 +415,9 @@ cargo run -p xtask -- build --release --skip-webui
 
 # Local lite debug build
 ./scripts/build-local.sh --lite
+
+# Local nano debug build
+./scripts/build-local.sh --nano
 
 # Local build with prebuilt Kasumi LKM .ko assets (full only)
 ./scripts/build-local.sh --release --kasumi-lkm-dir /path/to/kasumi-lkm

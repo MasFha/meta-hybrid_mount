@@ -22,7 +22,9 @@ mod sys;
 mod utils;
 
 use anyhow::Result;
+#[cfg(feature = "control-plane")]
 use clap::Parser;
+#[cfg(feature = "control-plane")]
 use conf::cli::Cli;
 
 fn main() -> Result<()> {
@@ -30,6 +32,14 @@ fn main() -> Result<()> {
         panic!("不支持Late-load（越狱）模式");
     }
 
-    let cli = Cli::parse();
-    core::entry::run(cli)
+    #[cfg(feature = "control-plane")]
+    {
+        let cli = Cli::parse();
+        core::entry::run(cli)
+    }
+
+    #[cfg(not(feature = "control-plane"))]
+    {
+        core::startup::run_default()
+    }
 }

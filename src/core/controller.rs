@@ -87,13 +87,17 @@ impl MountController<Init> {
             "start: mount_base={}",
             mnt_base.display()
         );
+        #[cfg(feature = "control-plane")]
+        let force_ext4 = matches!(
+            self.config.overlay_mode,
+            crate::conf::config::OverlayMode::Ext4
+        );
+        #[cfg(not(feature = "control-plane"))]
+        let force_ext4 = true;
         let handle = crate::core::storage::setup(
             mnt_base,
             &self.config.moduledir,
-            matches!(
-                self.config.overlay_mode,
-                crate::conf::config::OverlayMode::Ext4
-            ),
+            force_ext4,
             &self.config.mountsource,
             self.config.disable_umount,
         )?;

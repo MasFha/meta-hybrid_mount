@@ -52,11 +52,13 @@ fn running_description(
     kasumi_count: usize,
 ) -> String {
     let mode_str = match storage_mode {
+        #[cfg(feature = "control-plane")]
         StorageMode::Tmpfs => "Tmpfs",
         StorageMode::Ext4 => "Ext4",
     };
 
     let status_emoji = match storage_mode {
+        #[cfg(feature = "control-plane")]
         StorageMode::Tmpfs => "🐾",
         StorageMode::Ext4 => "💿",
     };
@@ -122,7 +124,10 @@ mod tests {
 
     #[test]
     fn running_description_keeps_kasumi_zero_count_when_enabled() {
+        #[cfg(feature = "control-plane")]
         let desc = running_description(StorageMode::Tmpfs, true, 2, 3, 0);
+        #[cfg(not(feature = "control-plane"))]
+        let desc = running_description(StorageMode::Ext4, true, 2, 3, 0);
 
         assert!(desc.contains("Kasumi:0"));
         assert!(desc.contains("Overlay:2"));
@@ -131,7 +136,10 @@ mod tests {
 
     #[test]
     fn running_description_hides_kasumi_count_when_disabled() {
+        #[cfg(feature = "control-plane")]
         let desc = running_description(StorageMode::Tmpfs, false, 2, 3, 0);
+        #[cfg(not(feature = "control-plane"))]
+        let desc = running_description(StorageMode::Ext4, false, 2, 3, 0);
 
         assert!(!desc.contains("Kasumi:"));
         assert!(desc.contains("Overlay:2"));

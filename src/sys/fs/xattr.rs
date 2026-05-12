@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use std::io::Read;
 use std::path::Path;
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use std::sync::atomic::AtomicBool;
+#[cfg(all(
+    feature = "control-plane",
+    any(target_os = "linux", target_os = "android")
+))]
+use std::{io::Read, sync::atomic::AtomicBool};
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use anyhow::Context;
@@ -28,7 +29,10 @@ use extattr::{Flags as XattrFlags, lsetxattr};
 const SELINUX_XATTR: &str = "security.selinux";
 #[cfg(any(target_os = "linux", target_os = "android"))]
 const OVERLAY_OPAQUE_XATTR: &str = "trusted.overlay.opaque";
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(all(
+    feature = "control-plane",
+    any(target_os = "linux", target_os = "android")
+))]
 static TMPFS_XATTR_SUPPORTED: AtomicBool = AtomicBool::new(false);
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -88,7 +92,10 @@ pub fn lgetfilecon<P: AsRef<Path>>(_path: P) -> Result<String> {
     anyhow::bail!("SELinux context reads are only supported on linux/android");
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(all(
+    feature = "control-plane",
+    any(target_os = "linux", target_os = "android")
+))]
 pub fn is_overlay_xattr_supported() -> Result<bool> {
     if TMPFS_XATTR_SUPPORTED.load(std::sync::atomic::Ordering::Relaxed) {
         return Ok(true);
@@ -118,7 +125,10 @@ pub fn is_overlay_xattr_supported() -> Result<bool> {
     Ok(supported)
 }
 
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
+#[cfg(all(
+    feature = "control-plane",
+    not(any(target_os = "linux", target_os = "android"))
+))]
 pub fn is_overlay_xattr_supported() -> Result<bool> {
     Ok(false)
 }

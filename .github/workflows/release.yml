@@ -95,6 +95,27 @@ jobs:
           restore-keys: |
             pnpm-${{ runner.os }}-
 
+      - name: Detect Release Type
+        id: release_type
+        run: |
+          set -euo pipefail
+          tag="${{ github.ref_name }}"
+          version="${tag#v}"
+          prerelease=true
+          if [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            patch="${version##*.}"
+            if [[ "$patch" == "0" ]]; then
+              prerelease=false
+            fi
+          fi
+          if [[ "$prerelease" == "true" ]]; then
+            release_type="pre-release"
+          else
+            release_type="release"
+          fi
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+          echo "release_type=$release_type" >> "$GITHUB_OUTPUT"
+
       - name: Build Release Packages
         env:
           HYBRID_MOUNT_SIGN_KEY: ${{ secrets.SIGNING_KEY }}
@@ -122,24 +143,30 @@ jobs:
               FULL_ZIP_PATH="$staged_zip"
               echo "FULL_ZIP_NAME=$zip_name" >> "$GITHUB_ENV"
               echo "FULL_ZIP_PATH=$staged_zip" >> "$GITHUB_ENV"
-            else
+            elif [ "$flavor" = "lite" ]; then
               LITE_ZIP_NAME="$zip_name"
               LITE_ZIP_PATH="$staged_zip"
               echo "LITE_ZIP_NAME=$zip_name" >> "$GITHUB_ENV"
               echo "LITE_ZIP_PATH=$staged_zip" >> "$GITHUB_ENV"
+            else
+              NANO_ZIP_NAME="$zip_name"
+              NANO_ZIP_PATH="$staged_zip"
+              echo "NANO_ZIP_NAME=$zip_name" >> "$GITHUB_ENV"
+              echo "NANO_ZIP_PATH=$staged_zip" >> "$GITHUB_ENV"
             fi
           }
 
           build_package full 0
           build_package lite 0
+          build_package nano 0
 
           NOTIFY_DIR="/tmp/hybrid-mount-release-notify"
           rm -rf "$NOTIFY_DIR"
           mkdir -p "$NOTIFY_DIR"
-          cp "$FULL_ZIP_PATH" "$LITE_ZIP_PATH" "$NOTIFY_DIR/"
+          cp "$FULL_ZIP_PATH" "$LITE_ZIP_PATH" "$NANO_ZIP_PATH" "$NOTIFY_DIR/"
           HYBRID_MOUNT_NOTIFY=1 cargo xtask notify \
             --output "$NOTIFY_DIR" \
-            --label "丰收 (Harvest) [full+lite] - ${{ github.ref_name }}" \
+            --label "丰收 (Harvest) [full+lite+nano] - ${{ github.ref_name }}" \
             --topic-id 6
 
       - name: Prepare Release Metadata
@@ -152,8 +179,10 @@ jobs:
 
           FULL_ZIP_NAME="${FULL_ZIP_NAME}"
           LITE_ZIP_NAME="${LITE_ZIP_NAME}"
+          NANO_ZIP_NAME="${NANO_ZIP_NAME}"
           FULL_DOWNLOAD_URL="https://github.com/$REPO/releases/download/$TAG/$FULL_ZIP_NAME"
           LITE_DOWNLOAD_URL="https://github.com/$REPO/releases/download/$TAG/$LITE_ZIP_NAME"
+          NANO_DOWNLOAD_URL="https://github.com/$REPO/releases/download/$TAG/$NANO_ZIP_NAME"
           CHANGELOG_URL="https://raw.githubusercontent.com/$REPO/main/changelog.md"
 
           cat <<EOF > /tmp/update.json
@@ -170,6 +199,15 @@ jobs:
             "version": "$TAG",
             "versionCode": $VERSION_CODE,
             "zipUrl": "$LITE_DOWNLOAD_URL",
+            "changelog": "$CHANGELOG_URL"
+          }
+          EOF
+
+          cat <<EOF > /tmp/update-nano.json
+          {
+            "version": "$TAG",
+            "versionCode": $VERSION_CODE,
+            "zipUrl": "$NANO_DOWNLOAD_URL",
             "changelog": "$CHANGELOG_URL"
           }
           EOF
@@ -201,10 +239,11 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         with:
           draft: false
-          prerelease: false
+          prerelease: ${{ steps.release_type.outputs.prerelease }}
           files: |
             ${{ env.FULL_ZIP_PATH }}
             ${{ env.LITE_ZIP_PATH }}
+            ${{ env.NANO_ZIP_PATH }}
           body_path: /tmp/changelog.md
 
       - name: Create Remote Release (KernelSU-Repo)
@@ -215,10 +254,11 @@ jobs:
           repository: KernelSU-Modules-Repo/hybrid_mount
           tag_name: ${{ github.ref_name }}
           draft: false
-          prerelease: false
+          prerelease: ${{ steps.release_type.outputs.prerelease }}
           files: |
             ${{ env.FULL_ZIP_PATH }}
             ${{ env.LITE_ZIP_PATH }}
+            ${{ env.NANO_ZIP_PATH }}
           body_path: /tmp/changelog.md
 
       - name: Sync Version to Main
@@ -232,11 +272,12 @@ jobs:
 
           mv /tmp/update.json update.json
           mv /tmp/update-lite.json update-lite.json
+          mv /tmp/update-nano.json update-nano.json
           cat /tmp/changelog.md | cat - changelog.md > temp && mv temp changelog.md
 
           cargo update
 
-          git add update.json update-lite.json changelog.md Cargo.toml Cargo.lock
+          git add update.json update-lite.json update-nano.json changelog.md Cargo.toml Cargo.lock
 
           if ! git diff --staged --quiet; then
             git commit -m "chore(release): sync version ${{ github.ref_name }} [skip ci]"

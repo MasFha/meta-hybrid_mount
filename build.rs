@@ -101,6 +101,7 @@ fn gen_module_prop(data: &build_meta_shared::CargoConfig) -> Result<()> {
         author: &author,
         description: &package.description,
         update_json: &package.metadata.hybrid_mount.update,
+        webui_icon: true,
     });
 
     let mut file = fs::OpenOptions::new()

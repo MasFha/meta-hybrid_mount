@@ -74,6 +74,8 @@ struct PrepareContext {
     use_kasumi: bool,
     overlay_fallback_enabled: bool,
     managed_partitions: HashSet<String>,
+    #[cfg(not(feature = "control-plane"))]
+    overlay_whitelist: Vec<String>,
     target_cache: HashMap<PathBuf, PathBuf>,
 }
 
@@ -87,6 +89,13 @@ impl PrepareContext {
             use_kasumi: capabilities.can_use_kasumi(),
             overlay_fallback_enabled: config.enable_overlay_fallback,
             managed_partitions,
+            #[cfg(not(feature = "control-plane"))]
+            overlay_whitelist: config
+                .overlay_whitelist
+                .iter()
+                .map(|path| normalize_policy_path(path))
+                .filter(|path| !path.is_empty())
+                .collect(),
             target_cache: HashMap::new(),
         }
     }
@@ -233,6 +242,8 @@ impl PrepareContext {
         } else {
             requested_mode
         };
+        #[cfg(not(feature = "control-plane"))]
+        let effective_mode = self.nano_effective_mode(&item.relative_path, effective_mode);
         log_mode_decision(
             module,
             &item.relative_path,
@@ -241,9 +252,16 @@ impl PrepareContext {
         );
 
         let has_descendant_rules = module.rules.has_descendant_rule(&item.relative_path);
+        #[cfg(not(feature = "control-plane"))]
+        let has_descendant_rules =
+            has_descendant_rules || self.has_descendant_overlay_whitelist(&item.relative_path);
         let has_any_entries = direct_non_dir_entries || has_child_dirs;
+        #[cfg(feature = "control-plane")]
+        let has_magic_entries = has_any_entries;
+        #[cfg(not(feature = "control-plane"))]
+        let has_magic_entries = direct_non_dir_entries || (has_child_dirs && !has_descendant_rules);
 
-        if matches!(effective_mode, MountMode::Magic) && has_any_entries {
+        if matches!(effective_mode, MountMode::Magic) && has_magic_entries {
             outcome.plan.magic = true;
         }
         if matches!(effective_mode, MountMode::Overlay)
@@ -306,6 +324,39 @@ impl PrepareContext {
                 false
             }
         }
+    }
+
+    #[cfg(not(feature = "control-plane"))]
+    fn nano_effective_mode(&self, relative_path: &Path, mode: MountMode) -> MountMode {
+        if matches!(mode, MountMode::Ignore) {
+            return MountMode::Ignore;
+        }
+
+        if self.is_overlay_whitelisted(relative_path) {
+            MountMode::Overlay
+        } else {
+            MountMode::Magic
+        }
+    }
+
+    #[cfg(not(feature = "control-plane"))]
+    fn is_overlay_whitelisted(&self, relative_path: &Path) -> bool {
+        let relative = normalize_policy_path(relative_path);
+        self.overlay_whitelist
+            .iter()
+            .any(|prefix| path_matches_policy_prefix(&relative, prefix))
+    }
+
+    #[cfg(not(feature = "control-plane"))]
+    fn has_descendant_overlay_whitelist(&self, relative_path: &Path) -> bool {
+        let relative = normalize_policy_path(relative_path);
+        if relative.is_empty() {
+            return !self.overlay_whitelist.is_empty();
+        }
+
+        self.overlay_whitelist
+            .iter()
+            .any(|prefix| path_is_policy_descendant(prefix, &relative))
     }
 }
 
@@ -645,6 +696,32 @@ fn log_mode_decision(
     }
 }
 
+#[cfg(not(feature = "control-plane"))]
+fn normalize_policy_path(path: &Path) -> String {
+    path.components()
+        .filter_map(|component| match component {
+            std::path::Component::Normal(value) => Some(value.to_string_lossy().into_owned()),
+            _ => None,
+        })
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+#[cfg(not(feature = "control-plane"))]
+fn path_matches_policy_prefix(path: &str, prefix: &str) -> bool {
+    path == prefix
+        || path
+            .strip_prefix(prefix)
+            .is_some_and(|rest| rest.starts_with('/'))
+}
+
+#[cfg(not(feature = "control-plane"))]
+fn path_is_policy_descendant(candidate: &str, ancestor: &str) -> bool {
+    candidate
+        .strip_prefix(ancestor)
+        .is_some_and(|rest| rest.starts_with('/'))
+}
+
 #[cfg(test)]
 mod tests {
     use tempfile::TempDir;
@@ -685,6 +762,20 @@ mod tests {
         }
     }
 
+    fn config_with_overlay_whitelist(paths: &[&str]) -> config::Config {
+        #[cfg(not(feature = "control-plane"))]
+        {
+            let mut config = test_config();
+            config.overlay_whitelist = paths.iter().map(PathBuf::from).collect();
+            config
+        }
+        #[cfg(feature = "control-plane")]
+        {
+            let _ = paths;
+            test_config()
+        }
+    }
+
     fn prepare_with_root(
         config: &config::Config,
         modules: &[Module],
@@ -716,7 +807,7 @@ mod tests {
         let module = make_module("foo", &source, MountMode::Overlay, &[]);
 
         let plan = prepare_with_root(
-            &test_config(),
+            &config_with_overlay_whitelist(&["system/bin"]),
             &[module],
             &storage,
             &system_root,
@@ -837,7 +928,7 @@ mod tests {
         let module = make_module("foo", &source, MountMode::Overlay, &[]);
 
         let plan = prepare_with_root(
-            &test_config(),
+            &config_with_overlay_whitelist(&["system/bin"]),
             &[module],
             &storage,
             &system_root,

@@ -15,6 +15,7 @@
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub const HYBRID_MOUNT_DIR: &str = "/data/adb/hybrid-mount";
 pub const MODULES_DIR: &str = "/data/adb/modules";
+#[allow(dead_code)]
 pub const HYBRID_MOUNT_MODULE_DIR: &str = "/data/adb/modules/hybrid_mount";
 
 pub const MODULES_IMG_FILE: &str = "/data/adb/hybrid-mount/modules.img";
@@ -22,7 +23,9 @@ pub const MODULES_IMG_FILE: &str = "/data/adb/hybrid-mount/modules.img";
 pub const KASUMI_IMG_FILE: &str = "/data/adb/hybrid-mount/kasumi.img";
 pub const RUN_DIR: &str = "/data/adb/hybrid-mount/run/";
 pub const STATE_FILE: &str = "/data/adb/hybrid-mount/run/daemon_state.json";
+#[allow(dead_code)]
 pub const SOCKET_FILE: &str = "/data/adb/hybrid-mount/run/daemon.sock";
+#[allow(dead_code)]
 pub const PID_FILE: &str = "/data/adb/hybrid-mount/run/daemon.pid";
 pub const SYSTEM_RW_DIR: &str = "/data/adb/hybrid-mount/rw";
 pub const CONFIG_FILE: &str = "/data/adb/hybrid-mount/config.toml";
@@ -48,6 +51,10 @@ pub const IGNORE_UNMOUNT_PARTITIONS: &[&str] = &[
     "/system/lib",
     "/system/lib64",
 ];
+
+#[allow(dead_code)]
+pub const NANO_OVERLAY_WHITELIST: &[&str] =
+    &["vendor/lib", "vendor/lib64", "system/lib", "system/lib64"];
 
 pub const MANAGED_PARTITIONS: &[&str] = &[
     "odm",

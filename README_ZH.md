@@ -16,7 +16,7 @@ Hybrid Mount 是面向 **KernelSU** 与 **APatch** 的挂载编排元模块。
 
 内置 **SolidJS WebUI**，支持图形化管理、实时状态监控和配置编辑。
 
-发布包现在分为两个版本：`full` 包含 Kasumi 的前后端与 LKM；`lite` 完全不包含 Kasumi，不会把 Kasumi 编译进包内。除非另有说明，下面内容默认描述的是 `full` 版本。
+发布包现在分为三个版本：`full` 包含 Kasumi 的前后端与 LKM；`lite` 完全不包含 Kasumi；`nano` 是纯配置文件控制，不包含 WebUI/CLI/daemon 控制面。除非另有说明，下面内容默认描述的是 `full` 版本。
 
 **[🇺🇸 English](README.md)**
 
@@ -404,6 +404,9 @@ cargo run -p xtask -- build --release --flavor full
 # Lite 版本构建（二进制 + WebUI，不含 Kasumi）→ output/
 cargo run -p xtask -- build --release --flavor lite
 
+# Nano 版本构建（纯配置文件控制，不含 WebUI/CLI/daemon）→ output/
+cargo run -p xtask -- build --release --flavor nano
+
 # 仅构建二进制（跳过 WebUI）
 cargo run -p xtask -- build --release --skip-webui
 
@@ -412,6 +415,9 @@ cargo run -p xtask -- build --release --skip-webui
 
 # 本地 lite 调试构建
 ./scripts/build-local.sh --lite
+
+# 本地 nano 调试构建
+./scripts/build-local.sh --nano
 
 # 打入预编译的 Kasumi LKM .ko 资产（仅 full 版本）
 ./scripts/build-local.sh --release --kasumi-lkm-dir /path/to/kasumi-lkm

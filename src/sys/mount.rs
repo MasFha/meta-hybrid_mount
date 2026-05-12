@@ -103,6 +103,7 @@ pub fn mount_tmpfs(target: &Path, source: &str) -> Result<()> {
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
+#[allow(dead_code)]
 pub fn mount_tmpfs(_target: &Path, _source: &str) -> Result<()> {
     bail!("tmpfs mounting is only supported on linux/android")
 }

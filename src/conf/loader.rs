@@ -16,12 +16,11 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 
-use crate::{
-    conf::{cli::Cli, config::Config},
-    defs,
-};
+#[cfg(feature = "control-plane")]
+use crate::conf::cli::Cli;
+use crate::{conf::config::Config, defs};
 
-fn load_default_config() -> Result<Config> {
+pub fn load_default_config() -> Result<Config> {
     let default_path = Path::new(defs::CONFIG_FILE);
     crate::scoped_log!(
         debug,
@@ -56,6 +55,7 @@ fn load_default_config() -> Result<Config> {
     Ok(config)
 }
 
+#[cfg(feature = "control-plane")]
 pub fn load_config(cli: &Cli) -> Result<Config> {
     if let Some(config_path) = &cli.config {
         crate::scoped_log!(

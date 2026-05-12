@@ -35,6 +35,7 @@ Usage: ./scripts/build-local.sh [options]
 Options:
   -r, --release               Build a release package
       --lite                  Build the lite package (no Kasumi frontend/backend/LKM)
+      --nano                  Build the nano package (config-only, no WebUI/CLI/daemon)
   -a, --arch <arm64>
                               Build a single Android ABI (default: arm64)
       --all-arch              Build all supported Android ABIs (currently arm64 only)
@@ -84,6 +85,10 @@ while [[ $# -gt 0 ]]; do
 		BUILD_FLAVOR="lite"
 		shift
 		;;
+	--nano)
+		BUILD_FLAVOR="nano"
+		shift
+		;;
 	-a | --arch)
 		ARCH="$2"
 		shift 2
@@ -131,7 +136,7 @@ if ! cargo ndk --help >/dev/null 2>&1; then
 	exit 1
 fi
 
-if [[ "$SKIP_WEBUI" != "true" ]]; then
+if [[ "$BUILD_FLAVOR" != "nano" && "$SKIP_WEBUI" != "true" ]]; then
 	require_cmd pnpm
 fi
 
@@ -161,14 +166,16 @@ else
 	echo "Arch: $ARCH"
 fi
 echo "NDK: $ANDROID_NDK_HOME"
-if [[ "$SKIP_WEBUI" == "true" ]]; then
+if [[ "$BUILD_FLAVOR" == "nano" ]]; then
+	echo "WebUI: omitted"
+elif [[ "$SKIP_WEBUI" == "true" ]]; then
 	echo "WebUI: skip"
 else
 	echo "WebUI: build"
 fi
 if [[ -n "${HYBRID_MOUNT_KASUMI_LKM_DIR:-}" ]]; then
-	if [[ "$BUILD_FLAVOR" == "lite" ]]; then
-		echo "Kasumi LKM dir: ignored for lite build"
+	if [[ "$BUILD_FLAVOR" != "full" ]]; then
+		echo "Kasumi LKM dir: ignored for $BUILD_FLAVOR build"
 	else
 		echo "Kasumi LKM dir: ${HYBRID_MOUNT_KASUMI_LKM_DIR}"
 	fi

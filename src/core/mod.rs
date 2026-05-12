@@ -12,11 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#[cfg(any(feature = "control-plane", feature = "kasumi"))]
 pub mod api;
 pub mod backend_capabilities;
+#[cfg(feature = "control-plane")]
 pub mod cli_commands;
 pub mod controller;
+#[cfg(feature = "control-plane")]
 pub mod daemon;
+#[cfg(feature = "control-plane")]
 pub mod entry;
 pub mod inventory;
 #[cfg(feature = "kasumi")]
