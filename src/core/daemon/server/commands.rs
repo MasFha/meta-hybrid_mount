@@ -240,13 +240,13 @@ pub(super) fn dispatch_command(ctx: &CommandContext<'_>, command: DaemonCommand)
             #[cfg(feature = "kasumi")]
             {
                 let kasumi_status_value = build_kasumi_runtime_json(config, &snapshot)?;
-                return to_value(&json!({
+                to_value(&json!({
                     "status": status_value,
                     "config": config_value,
                     "version": version_value,
                     "kasumi_status": kasumi_status_value,
                     "system_info": system_info_value,
-                }));
+                }))
             }
             #[cfg(not(feature = "kasumi"))]
             to_value(&json!({
