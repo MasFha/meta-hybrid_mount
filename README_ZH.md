@@ -5,7 +5,7 @@
 ![Language](https://img.shields.io/badge/Language-Rust-orange?style=flat-square&logo=rust)
 ![Platform](https://img.shields.io/badge/Platform-Android-green?style=flat-square&logo=android)
 ![License](https://img.shields.io/badge/License-Apache--2.0-blue?style=flat-square)
-![Version](https://img.shields.io/badge/Version-4.0.1-8A2BE2?style=flat-square)
+![Version](https://img.shields.io/badge/Version-4.0.5-8A2BE2?style=flat-square)
 
 Hybrid Mount 是面向 **KernelSU** 与 **APatch** 的挂载编排元模块。
 通过统一的策略引擎，将模块文件合并到 Android 分区，并支持三种挂载后端：

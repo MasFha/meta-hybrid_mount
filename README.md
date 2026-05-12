@@ -5,7 +5,7 @@
 ![Language](https://img.shields.io/badge/Language-Rust-orange?style=flat-square&logo=rust)
 ![Platform](https://img.shields.io/badge/Platform-Android-green?style=flat-square&logo=android)
 ![License](https://img.shields.io/badge/License-Apache--2.0-blue?style=flat-square)
-![Version](https://img.shields.io/badge/Version-4.0.1-8A2BE2?style=flat-square)
+![Version](https://img.shields.io/badge/Version-4.0.5-8A2BE2?style=flat-square)
 
 Hybrid Mount is a mount orchestration metamodule for **KernelSU** and **APatch**.
 It merges module files into Android partitions through a unified policy engine backed by three mount backends:
