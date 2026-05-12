@@ -16,15 +16,16 @@ It merges module files into Android partitions through a unified policy engine b
 
 A built-in **SolidJS WebUI** provides graphical management, live state monitoring, and configuration editing.
 
-Releases are published in three flavors: `full` includes Kasumi end to end, `lite` strips Kasumi, and `nano` is config-only with no WebUI/CLI/daemon control plane. Unless noted otherwise, the rest of this README describes the `full` build.
+Releases are published in three flavors — see [Build Flavors](#build-flavors) for a detailed comparison. Unless noted otherwise, the rest of this README describes the `full` build.
 
-**[🇨🇳 中文文档](README_ZH.md)**
+**[🇨🇳 中文文档](README_ZH.md)** &nbsp; **[🇯🇵 日本語](README_JP.md)**
 
 ---
 
 ## Table of Contents
 
 - [Features](#features)
+- [Build Flavors](#build-flavors)
 - [Quick Start](#quick-start)
 - [Mount Modes](#mount-modes)
 - [WebUI](#webui)
@@ -38,6 +39,58 @@ Releases are published in three flavors: `full` includes Kasumi end to end, `lit
 - [License](#license)
 
 ---
+
+## Build Flavors
+
+Hybrid Mount is released in three flavors, each targeting a different use case:
+
+| Flavor | Binary | WebUI | Daemon / CLI | Kasumi LKM | Best for |
+|--------|--------|-------|-------------|------------|----------|
+| **Full** | Yes | Yes | Yes | Yes | Users who want the complete feature set with Kasumi hide/spoof capabilities. |
+| **Lite** | Yes | Yes | Yes | No | Users who want the WebUI and full policy engine but don't need LKM-backed stealth features. |
+| **Nano** | Yes | No | No | No | Minimalists who just want mount orchestration via config file — no runtime daemon, no WebUI, no CLI. |
+
+### Full
+
+The `full` flavor includes everything: all three mount backends (OverlayFS, Magic Mount, Kasumi), the SolidJS WebUI, the Unix-socket daemon with HTTP/SSE, the full CLI, and the Kasumi LKM assets. This is the recommended build for most users.
+
+### Lite
+
+The `lite` flavor strips the Kasumi LKM and all Kasumi-related features (hide, spoof, stealth, kstat rules, uname spoofing, etc.) but keeps the WebUI, daemon, CLI, and both OverlayFS and Magic Mount backends. Choose Lite if:
+
+- Your kernel doesn't support loading external LKMs.
+- You don't need runtime hide/spoof capabilities.
+- You want a smaller download with the full graphical management experience.
+
+Lite builds use the feature set `control-plane` (no `kasumi`). The WebUI's Kasumi panel is hidden automatically.
+
+### Nano
+
+The `nano` flavor is a **config-only** build. It strips the WebUI, daemon, CLI, and all control-plane infrastructure. What remains is a minimal binary that reads `config.toml`, generates a mount plan, and executes it — then exits. Key characteristics:
+
+- **No runtime daemon** — no background process, no socket, no WebUI, no CLI subcommands.
+- **No WebUI** — the `webroot/`, `launcher.png`, and `service.sh` assets are removed from the package.
+- **Mount-only operation** — the binary runs during boot, mounts everything according to the config, and terminates.
+- **Default mode is `magic`** — Nano ships with `default_mode = "magic"` pre-set in its config, preferring bind mounts over OverlayFS for maximum compatibility without a daemon to manage ext4 images.
+- **OverlayFS whitelist** — a curated allowlist of paths that may still use OverlayFS when explicitly configured.
+- **Zero runtime overhead** — after boot completes, Hybrid Mount leaves no running processes.
+
+Choose Nano if you want predictable, daemon-free mount orchestration with the smallest possible footprint.
+
+### Feature matrix
+
+| Feature | Full | Lite | Nano |
+|---------|------|------|------|
+| OverlayFS backend | Yes | Yes | Whitelist only |
+| Magic Mount backend | Yes | Yes | Yes (default) |
+| Kasumi backend | Yes | No | No |
+| WebUI | Yes | Yes | No |
+| CLI (`hybrid-mount` subcommands) | Yes | Yes | No |
+| Daemon (Unix + TCP/SSE) | Yes | Yes | No |
+| Config caching & runtime apply | Yes | Yes | No |
+| Kasumi hide/spoof/stealth | Yes | No | No |
+| LKM autoload | Yes | No | No |
+| ZIP size (approx.) | ~4 MB | ~2 MB | ~1 MB |
 
 ## Features
 
@@ -56,7 +109,7 @@ Releases are published in three flavors: `full` includes Kasumi end to end, `lit
 ### Installation
 
 1. Install [KernelSU](https://kernelsu.org/) or [APatch](https://apatch.dev/) on your device.
-2. Download the latest Hybrid Mount `full` or `lite` release ZIP from [GitHub Releases](https://github.com/Hybrid-Mount/meta-hybrid_mount/releases).
+2. Download the latest Hybrid Mount `full`, `lite`, or `nano` release ZIP from [GitHub Releases](https://github.com/Hybrid-Mount/meta-hybrid_mount/releases).
 3. Flash the ZIP through your root manager's module installer.
 4. Reboot. Hybrid Mount will auto-detect your environment and apply the default overlay policy.
 
@@ -68,10 +121,9 @@ hybrid-mount daemon status
 
 # List detected modules
 hybrid-mount api modules-list
-
-# Open the WebUI in your browser
-# (the daemon prints the URL to logcat on startup)
 ```
+
+To access the WebUI (Full/Lite flavors), open your root manager app (KernelSU or APatch), find Hybrid Mount in the modules list, and tap it — the manager will launch the WebUI in an embedded WebView.
 
 ### Changing mount mode for a module
 
@@ -116,16 +168,18 @@ When `enable_overlay_fallback = true`, modules planned for OverlayFS that cannot
 
 Hybrid Mount includes a **SolidJS-based WebUI** served by the daemon over a local TCP socket (HTTP/SSE). CLI and automation clients communicate over a Unix socket. The daemon prints the WebUI access URL to logcat on startup.
 
+The WebUI is designed to be opened directly from your **root manager app** (KernelSU or APatch manager) — tap the module entry and the manager will launch the WebUI in an embedded WebView. No external browser is required on-device.
+
 ### Capabilities
 
 - **Status dashboard** — live mount statistics, active partitions, storage mode, daemon health.
 - **Module management** — list all detected modules with their effective mount modes; apply mode changes interactively.
 - **Configuration editor** — full config.toml editing with validation, including per-module path rules.
-- **Kasumi control panel** — LKM status, rule listing, feature toggles, uname configuration, maps/kstat rules.
+- **Kasumi control panel** — LKM status, rule listing, feature toggles, uname configuration, maps/kstat rules (Full flavor only).
 
 ### Access
 
-The WebUI runs on `http://127.0.0.1:<random-port>` with a cryptographic access token. The daemon manages the lifecycle — no separate web server needed. On-device, use a browser or WebView; remotely, forward the port via ADB.
+The WebUI runs on `http://127.0.0.1:<random-port>` with a cryptographic access token. The daemon manages the lifecycle — no separate web server needed. On-device, open through your root manager's WebView; remotely, forward the port via ADB.
 
 ---
 

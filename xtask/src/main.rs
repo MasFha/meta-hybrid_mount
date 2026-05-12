@@ -64,8 +64,8 @@ impl BuildFlavor {
     fn zip_stem(self, version: &str) -> String {
         match self {
             Self::Full => format!("Hybrid-Mount-{version}"),
-            Self::Lite => format!("Hybrid-Mount-lite-{version}"),
-            Self::Nano => format!("Hybrid-Mount-nano-{version}"),
+            Self::Lite => format!("Hybrid-Mount-Lite-{version}"),
+            Self::Nano => format!("Hybrid-Mount-Nano-{version}"),
         }
     }
 

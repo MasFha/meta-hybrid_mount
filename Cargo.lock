@@ -1413,7 +1413,6 @@ dependencies = [
 [[package]]
 name = "notify"
 version = "0.1.0"
-source = "git+https://github.com/Hybrid-Mount/hybrid_mount_notify.git?branch=main#b2b832519814c805512b3dd7d382284b3e7be355"
 dependencies = [
  "anyhow",
  "tgbot",

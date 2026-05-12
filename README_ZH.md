@@ -16,15 +16,16 @@ Hybrid Mount 是面向 **KernelSU** 与 **APatch** 的挂载编排元模块。
 
 内置 **SolidJS WebUI**，支持图形化管理、实时状态监控和配置编辑。
 
-发布包现在分为三个版本：`full` 包含 Kasumi 的前后端与 LKM；`lite` 完全不包含 Kasumi；`nano` 是纯配置文件控制，不包含 WebUI/CLI/daemon 控制面。除非另有说明，下面内容默认描述的是 `full` 版本。
+发布包现在分为三个版本 — 详见 [构建版本](#构建版本) 对比。除非另有说明，下面内容默认描述的是 `full` 版本。
 
-**[🇺🇸 English](README.md)**
+**[🇺🇸 English](README.md)** &nbsp; **[🇯🇵 日本語](README_JP.md)**
 
 ---
 
 ## 目录
 
 - [特性](#特性)
+- [构建版本](#构建版本)
 - [快速开始](#快速开始)
 - [挂载方式](#挂载方式)
 - [WebUI](#webui)
@@ -38,6 +39,58 @@ Hybrid Mount 是面向 **KernelSU** 与 **APatch** 的挂载编排元模块。
 - [开源协议](#开源协议)
 
 ---
+
+## 构建版本
+
+Hybrid Mount 发布为三种构建版本（flavor），分别面向不同使用场景：
+
+| 版本 | 二进制 | WebUI | 守护进程/CLI | Kasumi LKM | 适用场景 |
+|------|--------|-------|-------------|------------|----------|
+| **Full** | 是 | 是 | 是 | 是 | 需要完整 Kasumi hide/spoof 功能的用户。 |
+| **Lite** | 是 | 是 | 是 | 否 | 需要 WebUI 和完整策略引擎，但不需要 LKM 级 stealth 功能的用户。 |
+| **Nano** | 是 | 否 | 否 | 否 | 极简主义用户，仅需通过配置文件控制挂载，无需运行时守护进程。 |
+
+### Full
+
+`full` 版本包含全部功能：三种挂载后端（OverlayFS、Magic Mount、Kasumi）、SolidJS WebUI、Unix socket 守护进程及 HTTP/SSE、完整 CLI，以及 Kasumi LKM 资产。这是推荐大多数用户使用的版本。
+
+### Lite
+
+`lite` 版本移除了 Kasumi LKM 及所有 Kasumi 相关功能（hide、spoof、stealth、kstat 规则、uname 伪装等），但保留了 WebUI、守护进程、CLI 以及 OverlayFS 和 Magic Mount 两种后端。选择 Lite 的理由：
+
+- 你的内核不支持加载外部 LKM。
+- 你不需要运行时 hide/spoof 能力。
+- 你想要更小的下载体积，同时保留完整的图形化管理体验。
+
+Lite 构建使用 `control-plane` 特性集（不含 `kasumi`）。WebUI 中的 Kasumi 面板会自动隐藏。
+
+### Nano
+
+`nano` 版本是**纯配置文件驱动**的构建。它移除了 WebUI、守护进程、CLI 以及所有控制面基础设施，仅保留一个最小化的二进制文件，该文件读取 `config.toml`、生成挂载计划、执行挂载，然后退出。核心特征：
+
+- **无运行时守护进程** — 无后台进程、无 socket、无 WebUI、无 CLI 子命令。
+- **无 WebUI** — 包中移除了 `webroot/`、`launcher.png` 和 `service.sh` 资源。
+- **纯挂载操作** — 二进制在启动时运行，按照配置完成所有挂载后终止。
+- **默认模式为 `magic`** — Nano 的预置配置中 `default_mode = "magic"`，优先使用 bind mount 而非 OverlayFS，以确保没有守护进程管理 ext4 镜像时的最大兼容性。
+- **OverlayFS 白名单** — 通过精选的路径白名单，允许特定路径在显式配置时仍走 OverlayFS。
+- **零运行时开销** — 启动完成后，Hybrid Mount 不留下任何运行中的进程。
+
+选择 Nano，如果你想要可预测、无守护进程的挂载编排，且追求最小的资源占用。
+
+### 功能矩阵
+
+| 功能 | Full | Lite | Nano |
+|------|------|------|------|
+| OverlayFS 后端 | 是 | 是 | 仅白名单 |
+| Magic Mount 后端 | 是 | 是 | 是（默认） |
+| Kasumi 后端 | 是 | 否 | 否 |
+| WebUI | 是 | 是 | 否 |
+| CLI（`hybrid-mount` 子命令） | 是 | 是 | 否 |
+| 守护进程（Unix + TCP/SSE） | 是 | 是 | 否 |
+| 配置缓存与运行时生效 | 是 | 是 | 否 |
+| Kasumi hide/spoof/stealth | 是 | 否 | 否 |
+| LKM 自动加载 | 是 | 否 | 否 |
+| ZIP 体积（约） | ~4 MB | ~2 MB | ~1 MB |
 
 ## 特性
 
@@ -56,7 +109,7 @@ Hybrid Mount 是面向 **KernelSU** 与 **APatch** 的挂载编排元模块。
 ### 安装
 
 1. 在设备上安装 [KernelSU](https://kernelsu.org/) 或 [APatch](https://apatch.dev/)。
-2. 从 [GitHub Releases](https://github.com/Hybrid-Mount/meta-hybrid_mount/releases) 下载对应的 Hybrid Mount `full` 或 `lite` 版本 ZIP。
+2. 从 [GitHub Releases](https://github.com/Hybrid-Mount/meta-hybrid_mount/releases) 下载对应的 Hybrid Mount `full`、`lite` 或 `nano` 版本 ZIP。
 3. 通过 Root 管理器的模块安装器刷入 ZIP。
 4. 重启设备。Hybrid Mount 将自动检测运行环境并应用默认 overlay 策略。
 
@@ -68,10 +121,9 @@ hybrid-mount daemon status
 
 # 列出已检测到的模块
 hybrid-mount api modules-list
-
-# 在浏览器中打开 WebUI
-# （守护进程启动时会将 URL 打印到 logcat）
 ```
+
+要访问 WebUI（Full/Lite 版本），打开你的 Root 管理器应用（KernelSU 或 APatch），在模块列表中找到 Hybrid Mount 并点击 — 管理器会在内嵌 WebView 中启动 WebUI。
 
 ### 更改模块的挂载方式
 
@@ -116,16 +168,18 @@ overlay_mode = "ext4"
 
 Hybrid Mount 内置 **基于 SolidJS 的 WebUI**，由守护进程通过本地 TCP socket（HTTP/SSE）提供服务。CLI 与自动化客户端通过 Unix socket 通信。守护进程启动时会将访问 URL 打印到 logcat。
 
+WebUI 设计为直接从你的 **Root 管理器应用**（KernelSU 或 APatch 管理器）中打开 — 点击模块条目，管理器会在内嵌 WebView 中启动 WebUI。无需在设备上额外安装浏览器。
+
 ### 功能
 
 - **状态面板** — 实时挂载统计、活跃分区、存储模式、守护进程健康状态。
 - **模块管理** — 列出所有已检测模块及其生效的挂载方式；交互式修改模块策略。
 - **配置编辑器** — 完整的 config.toml 编辑，带校验，支持逐模块路径规则配置。
-- **Kasumi 控制面板** — LKM 状态、规则列表、特性开关、uname 配置、maps/kstat 规则管理。
+- **Kasumi 控制面板** — LKM 状态、规则列表、特性开关、uname 配置、maps/kstat 规则管理（仅 Full 版本）。
 
 ### 访问方式
 
-WebUI 运行在 `http://127.0.0.1:<随机端口>`，使用加密访问令牌。守护进程管理整个生命周期，无需额外的 Web 服务器。在设备上使用浏览器或 WebView 访问；远程访问可通过 ADB 端口转发。
+WebUI 运行在 `http://127.0.0.1:<随机端口>`，使用加密访问令牌。守护进程管理整个生命周期，无需额外的 Web 服务器。在设备上通过 Root 管理器的 WebView 直接打开；远程访问可通过 ADB 端口转发。
 
 ---
 
