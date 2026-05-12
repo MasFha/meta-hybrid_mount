@@ -19,6 +19,7 @@ pub mod controller;
 pub mod daemon;
 pub mod entry;
 pub mod inventory;
+#[cfg(feature = "kasumi")]
 pub mod kasumi_coordinator;
 pub mod module_status;
 pub mod ops;
@@ -27,6 +28,7 @@ pub mod runtime_finalization;
 pub mod runtime_state;
 pub mod startup;
 pub mod storage;
+#[cfg(feature = "kasumi")]
 pub mod user_hide_rules;
 
 pub use controller::MountController;

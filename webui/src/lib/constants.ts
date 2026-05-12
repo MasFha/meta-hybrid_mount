@@ -1,7 +1,37 @@
-import { RUST_PATHS } from "./constants_gen";
+import { ENABLE_KASUMI, RUST_PATHS } from "./constants_gen";
 import type { AppConfig } from "./types";
 
-export const DEFAULT_CONFIG: AppConfig = {
+const DEFAULT_KASUMI_CONFIG: AppConfig["kasumi"] = {
+  enabled: false,
+  lkm_autoload: true,
+  lkm_dir: "/data/adb/modules/hybrid_mount/kasumi_lkm",
+  lkm_kmi_override: "",
+  mirror_path: "/dev/kasumi_mirror",
+  enable_kernel_debug: false,
+  enable_stealth: false,
+  enable_hidexattr: false,
+  enable_selinux_fix: false,
+  enable_mount_hide: false,
+  enable_maps_spoof: false,
+  enable_statfs_spoof: false,
+  mount_hide: { enabled: false, path_pattern: "" },
+  statfs_spoof: { enabled: false, path: "", spoof_f_type: 0 },
+  hide_uids: [],
+  uname_mode: "scoped",
+  uname: {
+    sysname: "",
+    nodename: "",
+    release: "",
+    version: "",
+    machine: "",
+    domainname: "",
+  },
+  cmdline_value: "",
+  kstat_rules: [],
+  maps_rules: [],
+};
+
+export const DEFAULT_CONFIG = {
   moduledir: "/data/adb/modules",
   mountsource: "KSU",
   disable_umount: false,
@@ -10,36 +40,8 @@ export const DEFAULT_CONFIG: AppConfig = {
   default_mode: "overlay",
   daemon_startup_mode: "on-demand",
   rules: {},
-  kasumi: {
-    enabled: false,
-    lkm_autoload: true,
-    lkm_dir: "/data/adb/modules/hybrid_mount/kasumi_lkm",
-    lkm_kmi_override: "",
-    mirror_path: "/dev/kasumi_mirror",
-    enable_kernel_debug: false,
-    enable_stealth: false,
-    enable_hidexattr: false,
-    enable_selinux_fix: false,
-    enable_mount_hide: false,
-    enable_maps_spoof: false,
-    enable_statfs_spoof: false,
-    mount_hide: { enabled: false, path_pattern: "" },
-    statfs_spoof: { enabled: false, path: "", spoof_f_type: 0 },
-    hide_uids: [],
-    uname_mode: "scoped",
-    uname: {
-      sysname: "",
-      nodename: "",
-      release: "",
-      version: "",
-      machine: "",
-      domainname: "",
-    },
-    cmdline_value: "",
-    kstat_rules: [],
-    maps_rules: [],
-  },
-};
+  ...(ENABLE_KASUMI ? { kasumi: DEFAULT_KASUMI_CONFIG } : {}),
+} as AppConfig;
 
 export const PATHS = {
   ...RUST_PATHS,

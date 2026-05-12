@@ -3,6 +3,7 @@ import type {
   RuntimeModeStatsPayload,
   RuntimeStatePayload,
 } from "../repos/runtimeRepo";
+import { ENABLE_KASUMI } from "../../constants_gen";
 import {
   isBoolean,
   isNumber,
@@ -22,7 +23,7 @@ export function buildModeStats(
   return {
     overlay: toNonNegativeInt(modeStats.overlayfs),
     magic: toNonNegativeInt(modeStats.magicmount),
-    kasumi: toNonNegativeInt(modeStats.kasumi),
+    kasumi: ENABLE_KASUMI ? toNonNegativeInt(modeStats.kasumi) : 0,
   };
 }
 
@@ -36,9 +37,10 @@ export function buildMountedCount(
   const magic = isStringArray(state.magic_modules)
     ? state.magic_modules.length
     : 0;
-  const kasumi = isStringArray(state.kasumi_modules)
-    ? state.kasumi_modules.length
-    : 0;
+  const kasumi =
+    ENABLE_KASUMI && isStringArray(state.kasumi_modules)
+      ? state.kasumi_modules.length
+      : 0;
   const total = overlay + magic + kasumi;
   return total > 0
     ? total

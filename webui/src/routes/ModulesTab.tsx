@@ -10,8 +10,9 @@ import {
 } from "solid-js";
 import { uiStore } from "../lib/stores/uiStore";
 import { moduleStore } from "../lib/stores/moduleStore";
-import { kasumiStore } from "../lib/stores/kasumiStore";
 import { ICONS } from "../lib/constants";
+import { ENABLE_KASUMI } from "../lib/constants_gen";
+import { features } from "../lib/features";
 import { API } from "../lib/api";
 import Skeleton from "../components/Skeleton";
 import BottomActions from "../components/BottomActions";
@@ -54,9 +55,11 @@ export default function ModulesTab() {
     setVisibleCount(BATCH_SIZE);
   });
 
-  const kasumiMasterEnabled = createMemo(() => kasumiStore.enabled);
+  const kasumiMasterEnabled = createMemo(
+    () => ENABLE_KASUMI && features.kasumiEnabled,
+  );
   const kasumiAvailable = createMemo(
-    () => kasumiMasterEnabled() && Boolean(kasumiStore.status?.available),
+    () => ENABLE_KASUMI && features.kasumiAvailable,
   );
   const showKasumiStrategy = createMemo(() => kasumiMasterEnabled());
 
@@ -238,7 +241,7 @@ export default function ModulesTab() {
                 <option value="magic">
                   {uiStore.L.modules?.modes?.short?.magic ?? "Magic"}
                 </option>
-                <Show when={showKasumiStrategy()}>
+                <Show when={ENABLE_KASUMI && showKasumiStrategy()}>
                   <option value="kasumi">
                     {uiStore.L.modules?.modes?.short?.kasumi ?? "Kasumi"}
                   </option>
@@ -374,7 +377,9 @@ export default function ModulesTab() {
                                     {uiStore.L.modules?.compatTag ?? "Compat"}
                                   </span>
                                 </button>
-                                <Show when={showKasumiStrategy()}>
+                                <Show
+                                  when={ENABLE_KASUMI && showKasumiStrategy()}
+                                >
                                   <button
                                     class={`strategy-option ${effectiveDefaultMode() === "kasumi" ? "selected" : ""}`}
                                     onClick={() =>

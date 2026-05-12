@@ -48,7 +48,7 @@ pub(super) fn effective_statfs_spoof_enabled(config: &config::Config) -> bool {
 }
 
 pub(super) fn effective_selinux_fix_enabled(config: &config::Config) -> bool {
-    config.kasumi.enable_selinux_fix || config.kasumi.enable_hidexattr
+    config.kasumi.enable_selinux_fix
 }
 
 pub(super) fn has_uname_spoof_config(config: &config::Config) -> bool {
@@ -74,4 +74,24 @@ pub(super) fn to_c_ulong(value: u64, field_name: &str) -> Result<libc::c_ulong> 
 pub(super) fn to_c_long(value: i64, field_name: &str) -> Result<libc::c_long> {
     libc::c_long::try_from(value)
         .map_err(|_| anyhow!("{field_name} value {value} does not fit into c_long"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn selinux_fix_requires_the_explicit_toggle() {
+        let mut config = config::Config::default();
+
+        config.kasumi.enable_hidexattr = true;
+        assert!(effective_stealth_enabled(&config));
+        assert!(effective_mount_hide_enabled(&config));
+        assert!(effective_maps_spoof_enabled(&config));
+        assert!(effective_statfs_spoof_enabled(&config));
+        assert!(!effective_selinux_fix_enabled(&config));
+
+        config.kasumi.enable_selinux_fix = true;
+        assert!(effective_selinux_fix_enabled(&config));
+    }
 }

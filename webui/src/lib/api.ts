@@ -1,5 +1,6 @@
 import { AppError } from "./api/core/error";
 import { PATHS } from "./constants";
+import { ENABLE_KASUMI } from "./constants_gen";
 import {
   ensureDaemonAwake,
   hasExecBridge,
@@ -25,11 +26,80 @@ import {
   saveModuleRules,
   saveAllModuleRules,
 } from "./api/services/moduleService";
-import * as kasumiService from "./api/services/kasumiService";
-import { MockAPI } from "./api.mock";
 import type { AppAPI } from "./api/contracts";
 
-const RealAPI: AppAPI = {
+function loadKasumiService() {
+  if (!ENABLE_KASUMI) {
+    return Promise.reject(
+      new AppError("Kasumi is not available in this build"),
+    );
+  }
+  return import("./api/services/kasumiService");
+}
+
+const kasumiApi: Partial<AppAPI> = ENABLE_KASUMI
+  ? {
+      getKasumiStatus: async () =>
+        (await loadKasumiService()).getKasumiStatus(),
+      setKasumiEnabled: async (enabled: boolean) =>
+        (await loadKasumiService()).setKasumiEnabled(enabled),
+      setKasumiStealth: async (enabled: boolean) =>
+        (await loadKasumiService()).setKasumiStealth(enabled),
+      setKasumiHidexattr: async (enabled: boolean) =>
+        (await loadKasumiService()).setKasumiHidexattr(enabled),
+      setKasumiSelinuxFix: async (enabled: boolean) =>
+        (await loadKasumiService()).setKasumiSelinuxFix(enabled),
+      setKasumiDebug: async (enabled: boolean) =>
+        (await loadKasumiService()).setKasumiDebug(enabled),
+      getOriginalKernelUname: async () =>
+        (await loadKasumiService()).getOriginalKernelUname(),
+      setKasumiUnameMode: async (mode: "scoped" | "global") =>
+        (await loadKasumiService()).setKasumiUnameMode(mode),
+      setKasumiUname: async (uname) =>
+        (await loadKasumiService()).setKasumiUname(uname),
+      applyKasumiUname: async (mode, uname) =>
+        (await loadKasumiService()).applyKasumiUname(mode, uname),
+      clearKasumiUname: async (mode = "scoped") =>
+        (await loadKasumiService()).clearKasumiUname(mode),
+      restoreKasumiUnameGlobal: async () =>
+        (await loadKasumiService()).restoreKasumiUnameGlobal(),
+      setKasumiCmdline: async (value: string) =>
+        (await loadKasumiService()).setKasumiCmdline(value),
+      clearKasumiCmdline: async () =>
+        (await loadKasumiService()).clearKasumiCmdline(),
+      addKasumiMapsRule: async (rule) =>
+        (await loadKasumiService()).addKasumiMapsRule(rule),
+      clearKasumiMapsRules: async () =>
+        (await loadKasumiService()).clearKasumiMapsRules(),
+      getUserHideRules: async () =>
+        (await loadKasumiService()).getUserHideRules(),
+      addUserHideRule: async (path: string) =>
+        (await loadKasumiService()).addUserHideRule(path),
+      removeUserHideRule: async (path: string) =>
+        (await loadKasumiService()).removeUserHideRule(path),
+      applyUserHideRules: async () =>
+        (await loadKasumiService()).applyUserHideRules(),
+      loadKasumiLkm: async () => (await loadKasumiService()).loadKasumiLkm(),
+      unloadKasumiLkm: async () =>
+        (await loadKasumiService()).unloadKasumiLkm(),
+      setKasumiLkmAutoload: async (enabled: boolean) =>
+        (await loadKasumiService()).setKasumiLkmAutoload(enabled),
+      setKasumiLkmKmi: async (value: string) =>
+        (await loadKasumiService()).setKasumiLkmKmi(value),
+      clearKasumiLkmKmi: async () =>
+        (await loadKasumiService()).clearKasumiLkmKmi(),
+      fixKasumiMounts: async () =>
+        (await loadKasumiService()).fixKasumiMounts(),
+      clearKasumiRules: async () =>
+        (await loadKasumiService()).clearKasumiRules(),
+      releaseKasumiConnection: async () =>
+        (await loadKasumiService()).releaseKasumiConnection(),
+      invalidateKasumiCache: async () =>
+        (await loadKasumiService()).invalidateKasumiCache(),
+    }
+  : {};
+
+const RealAPI = {
   wakeDaemon: () => ensureDaemonAwake(PATHS.BINARY),
   init,
   loadConfig: loadConfigFromFile,
@@ -44,47 +114,20 @@ const RealAPI: AppAPI = {
   getStorageUsage,
   getSystemInfo,
   getVersion,
-  getKasumiStatus: kasumiService.getKasumiStatus,
-  setKasumiEnabled: kasumiService.setKasumiEnabled,
-  setKasumiStealth: kasumiService.setKasumiStealth,
-  setKasumiHidexattr: kasumiService.setKasumiHidexattr,
-  setKasumiSelinuxFix: kasumiService.setKasumiSelinuxFix,
-  setKasumiDebug: kasumiService.setKasumiDebug,
-  getOriginalKernelUname: kasumiService.getOriginalKernelUname,
-  setKasumiUnameMode: kasumiService.setKasumiUnameMode,
-  setKasumiUname: kasumiService.setKasumiUname,
-  applyKasumiUname: kasumiService.applyKasumiUname,
-  clearKasumiUname: kasumiService.clearKasumiUname,
-  restoreKasumiUnameGlobal: kasumiService.restoreKasumiUnameGlobal,
-  setKasumiCmdline: kasumiService.setKasumiCmdline,
-  clearKasumiCmdline: kasumiService.clearKasumiCmdline,
   clearMountErrors: () =>
     runDaemonCommand(
       { type: "clear-mount-errors" },
       PATHS.BINARY,
     ) as Promise<void>,
-  addKasumiMapsRule: kasumiService.addKasumiMapsRule,
-  clearKasumiMapsRules: kasumiService.clearKasumiMapsRules,
-  getUserHideRules: kasumiService.getUserHideRules,
-  addUserHideRule: kasumiService.addUserHideRule,
-  removeUserHideRule: kasumiService.removeUserHideRule,
-  applyUserHideRules: kasumiService.applyUserHideRules,
-  loadKasumiLkm: kasumiService.loadKasumiLkm,
-  unloadKasumiLkm: kasumiService.unloadKasumiLkm,
-  setKasumiLkmAutoload: kasumiService.setKasumiLkmAutoload,
-  setKasumiLkmKmi: kasumiService.setKasumiLkmKmi,
-  clearKasumiLkmKmi: kasumiService.clearKasumiLkmKmi,
-  fixKasumiMounts: kasumiService.fixKasumiMounts,
-  clearKasumiRules: kasumiService.clearKasumiRules,
-  releaseKasumiConnection: kasumiService.releaseKasumiConnection,
-  invalidateKasumiCache: kasumiService.invalidateKasumiCache,
+  ...kasumiApi,
   openLink,
   reboot,
-};
+} as AppAPI;
 
 export { AppError, hasExecBridge, runDaemonCommand };
 export type { AppAPI } from "./api/contracts";
 export type { DaemonCommandPayload } from "./api/core/bridge";
-export const API: AppAPI = shouldUseMock
-  ? (MockAPI as unknown as AppAPI)
-  : RealAPI;
+const mockApi = shouldUseMock
+  ? ((await import("./api.mock")).MockAPI as unknown as AppAPI)
+  : null;
+export const API: AppAPI = mockApi ?? RealAPI;

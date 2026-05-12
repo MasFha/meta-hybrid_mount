@@ -95,45 +95,84 @@ jobs:
           restore-keys: |
             pnpm-${{ runner.os }}-
 
-      - name: Build Release Package
+      - name: Build Release Packages
         env:
           HYBRID_MOUNT_SIGN_KEY: ${{ secrets.SIGNING_KEY }}
           HYBRID_MOUNT_SIGN_CERT: ${{ secrets.SIGNING_CERT }}
           HYBRID_MOUNT_KASUMI_LKM_DIR: ${{ github.workspace }}/kasumi_lkm_artifacts
-          HYBRID_MOUNT_NOTIFY: "1"
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          cargo xtask build --release --tag ${{ github.ref_name }}
+          set -euo pipefail
+
+          build_package() {
+            local flavor="$1"
+            local notify="$2"
+            rm -rf output
+            HYBRID_MOUNT_NOTIFY="$notify" cargo xtask build --release --tag "${{ github.ref_name }}" --flavor "$flavor"
+            local zip_path
+            zip_path="$(find output -maxdepth 1 -type f -name '*.zip' | sort | head -n 1)"
+            test -n "$zip_path"
+            local zip_name
+            zip_name="$(basename "$zip_path")"
+            local staged_zip="/tmp/$zip_name"
+            cp "$zip_path" "$staged_zip"
+            if [ "$flavor" = "full" ]; then
+              FULL_ZIP_NAME="$zip_name"
+              FULL_ZIP_PATH="$staged_zip"
+              echo "FULL_ZIP_NAME=$zip_name" >> "$GITHUB_ENV"
+              echo "FULL_ZIP_PATH=$staged_zip" >> "$GITHUB_ENV"
+            else
+              LITE_ZIP_NAME="$zip_name"
+              LITE_ZIP_PATH="$staged_zip"
+              echo "LITE_ZIP_NAME=$zip_name" >> "$GITHUB_ENV"
+              echo "LITE_ZIP_PATH=$staged_zip" >> "$GITHUB_ENV"
+            fi
+          }
+
+          build_package full 0
+          build_package lite 0
+
+          NOTIFY_DIR="/tmp/hybrid-mount-release-notify"
+          rm -rf "$NOTIFY_DIR"
+          mkdir -p "$NOTIFY_DIR"
+          cp "$FULL_ZIP_PATH" "$LITE_ZIP_PATH" "$NOTIFY_DIR/"
+          HYBRID_MOUNT_NOTIFY=1 cargo xtask notify \
+            --output "$NOTIFY_DIR" \
+            --label "丰收 (Harvest) [full+lite] - ${{ github.ref_name }}" \
+            --topic-id 6
 
       - name: Prepare Release Metadata
-        id: meta
         run: |
           set -euo pipefail
-          mapfile -t ZIP_FILES < <(find output -maxdepth 1 -type f -name '*.zip' | sort)
-          test "${#ZIP_FILES[@]}" -gt 0
-          ZIP_PATH="${ZIP_FILES[0]}"
-          ZIP_NAME=$(basename "$ZIP_PATH")
           REPO="${{ github.repository }}"
           TAG="${{ github.ref_name }}"
-          
           CLEAN_VERSION="${TAG#v}"
           VERSION_CODE=$(awk -F. '{printf "%d%02d%02d", $1, $2, $3}' <<< "$CLEAN_VERSION")
-          
-          echo "ZIP_PATH=$ZIP_PATH" >> "$GITHUB_ENV"
-          
-          DOWNLOAD_URL="https://github.com/$REPO/releases/download/$TAG/$ZIP_NAME"
+
+          FULL_ZIP_NAME="${FULL_ZIP_NAME}"
+          LITE_ZIP_NAME="${LITE_ZIP_NAME}"
+          FULL_DOWNLOAD_URL="https://github.com/$REPO/releases/download/$TAG/$FULL_ZIP_NAME"
+          LITE_DOWNLOAD_URL="https://github.com/$REPO/releases/download/$TAG/$LITE_ZIP_NAME"
           CHANGELOG_URL="https://raw.githubusercontent.com/$REPO/main/changelog.md"
-          
+
           cat <<EOF > /tmp/update.json
           {
             "version": "$TAG",
             "versionCode": $VERSION_CODE,
-            "zipUrl": "$DOWNLOAD_URL",
+            "zipUrl": "$FULL_DOWNLOAD_URL",
             "changelog": "$CHANGELOG_URL"
           }
           EOF
 
+          cat <<EOF > /tmp/update-lite.json
+          {
+            "version": "$TAG",
+            "versionCode": $VERSION_CODE,
+            "zipUrl": "$LITE_DOWNLOAD_URL",
+            "changelog": "$CHANGELOG_URL"
+          }
+          EOF
       - name: Ensure jq for git-cliff
         run: |
           set -euo pipefail
@@ -163,9 +202,11 @@ jobs:
         with:
           draft: false
           prerelease: false
-          files: ${{ env.ZIP_PATH }}
+          files: |
+            ${{ env.FULL_ZIP_PATH }}
+            ${{ env.LITE_ZIP_PATH }}
           body_path: /tmp/changelog.md
-          
+
       - name: Create Remote Release (KernelSU-Repo)
         uses: softprops/action-gh-release@v3
         if: startsWith(github.ref, 'refs/tags/')
@@ -175,7 +216,9 @@ jobs:
           tag_name: ${{ github.ref_name }}
           draft: false
           prerelease: false
-          files: ${{ env.ZIP_PATH }}
+          files: |
+            ${{ env.FULL_ZIP_PATH }}
+            ${{ env.LITE_ZIP_PATH }}
           body_path: /tmp/changelog.md
 
       - name: Sync Version to Main
@@ -183,17 +226,18 @@ jobs:
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          
+
           git fetch origin main
           git checkout main
-          
+
           mv /tmp/update.json update.json
+          mv /tmp/update-lite.json update-lite.json
           cat /tmp/changelog.md | cat - changelog.md > temp && mv temp changelog.md
 
           cargo update
-          
-          git add update.json changelog.md Cargo.toml Cargo.lock
-          
+
+          git add update.json update-lite.json changelog.md Cargo.toml Cargo.lock
+
           if ! git diff --staged --quiet; then
             git commit -m "chore(release): sync version ${{ github.ref_name }} [skip ci]"
             git push origin main

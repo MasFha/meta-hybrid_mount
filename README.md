@@ -16,6 +16,8 @@ It merges module files into Android partitions through a unified policy engine b
 
 A built-in **SolidJS WebUI** provides graphical management, live state monitoring, and configuration editing.
 
+Releases are published in two flavors: `full` includes Kasumi end to end, while `lite` strips Kasumi from the backend, WebUI, and bundled assets. Unless noted otherwise, the rest of this README describes the `full` build.
+
 **[🇨🇳 中文文档](README_ZH.md)**
 
 ---
@@ -41,7 +43,7 @@ A built-in **SolidJS WebUI** provides graphical management, live state monitorin
 
 - **Three backends, one policy engine** — assign paths to OverlayFS, Magic Mount, or Kasumi with per-path granularity.
 - **Deterministic planning** — conflicts are detected at plan time, not discovered randomly at boot.
-- **Built-in WebUI** — manage modules, edit configuration, monitor runtime state, and control Kasumi features from a browser or WebView.
+- **Built-in WebUI** — manage modules, edit configuration, monitor runtime state, and control Kasumi features in full builds.
 - **Kasumi runtime integration** — LKM autoload, mirror routing, mount hiding, maps/statfs spoofing, UID hiding, uname spoofing, and kstat rules.
 - **Config caching** — runtime config cache with incremental patching and immediate apply support.
 - **Recovery-friendly** — stale runtime files are cleaned automatically; misconfigurations can be reset via `api config-reset`.
@@ -54,7 +56,7 @@ A built-in **SolidJS WebUI** provides graphical management, live state monitorin
 ### Installation
 
 1. Install [KernelSU](https://kernelsu.org/) or [APatch](https://apatch.dev/) on your device.
-2. Download the latest Hybrid Mount release ZIP from [GitHub Releases](https://github.com/Hybrid-Mount/meta-hybrid_mount/releases).
+2. Download the latest Hybrid Mount `full` or `lite` release ZIP from [GitHub Releases](https://github.com/Hybrid-Mount/meta-hybrid_mount/releases).
 3. Flash the ZIP through your root manager's module installer.
 4. Reboot. Hybrid Mount will auto-detect your environment and apply the default overlay policy.
 
@@ -396,8 +398,11 @@ module/            Module packaging scripts and static assets
 ### Commands
 
 ```bash
-# Full release package (binary + WebUI) → output/
-cargo run -p xtask -- build --release
+# Full release package (binary + WebUI + Kasumi) → output/
+cargo run -p xtask -- build --release --flavor full
+
+# Lite release package (binary + WebUI, no Kasumi) → output/
+cargo run -p xtask -- build --release --flavor lite
 
 # Binary only (skip WebUI)
 cargo run -p xtask -- build --release --skip-webui
@@ -405,7 +410,10 @@ cargo run -p xtask -- build --release --skip-webui
 # Local arm64 debug build
 ./scripts/build-local.sh
 
-# Local build with prebuilt Kasumi LKM .ko assets
+# Local lite debug build
+./scripts/build-local.sh --lite
+
+# Local build with prebuilt Kasumi LKM .ko assets (full only)
 ./scripts/build-local.sh --release --kasumi-lkm-dir /path/to/kasumi-lkm
 
 # WebUI dev server (hot reload)
@@ -431,7 +439,7 @@ The release profile uses `opt-level = 3`, `lto = "fat"`, `codegen-units = 1`, `s
 - **Mount source auto-detection**: fresh installs detect the runtime environment automatically. Only set `mountsource` explicitly if auto-detection fails.
 - **Recovery from bad config**: run `hybrid-mount api config-reset` to reset to defaults, then reapply rules incrementally. Use `gen-config` to regenerate a fresh config file.
 - **Config caching**: the runtime maintains a cached config. Use `api config-patch --apply-runtime` to apply changes immediately, or restart the daemon.
-- **Kasumi LKM**: the LKM must match the running kernel. Use `lkm_kmi_override` if the auto-detected KMI is incorrect.
+- **Kasumi LKM (full builds only)**: the LKM must match the running kernel. Use `lkm_kmi_override` if the auto-detected KMI is incorrect.
 - **`kasumi clear`**: clears runtime state and releases kernel connection. Existing kernel-side rules may persist until LKM reload.
 - **Binary size**: prefer dependency feature trimming and profile tuning before invasive refactoring.
 

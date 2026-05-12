@@ -33,11 +33,65 @@ mod zip_ext;
 use crate::zip_ext::zip_create_from_directory_with_options;
 
 const KASUMI_LKM_STAGE_DIR: &str = "kasumi_lkm";
+const DEFAULT_LITE_UPDATE_JSON: &str =
+    "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/main/update-lite.json";
 
 #[derive(Debug, Clone, Copy, ValueEnum, PartialEq)]
 enum Arch {
     #[value(name = "arm64")]
     Arm64,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum, PartialEq, Eq)]
+enum BuildFlavor {
+    Full,
+    Lite,
+}
+
+impl BuildFlavor {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Full => "full",
+            Self::Lite => "lite",
+        }
+    }
+
+    fn zip_stem(self, version: &str) -> String {
+        match self {
+            Self::Full => format!("Hybrid-Mount-{version}"),
+            Self::Lite => format!("Hybrid-Mount-lite-{version}"),
+        }
+    }
+
+    fn module_name(self, meta: &build_meta_shared::HybridMountMetadata) -> String {
+        match self {
+            Self::Full => meta.name.clone(),
+            Self::Lite => meta
+                .lite_name
+                .clone()
+                .filter(|name| !name.trim().is_empty())
+                .unwrap_or_else(|| format!("{} Lite", meta.name)),
+        }
+    }
+
+    fn update_json(self, meta: &build_meta_shared::HybridMountMetadata) -> String {
+        match self {
+            Self::Full => meta.update.clone(),
+            Self::Lite => meta
+                .lite_update
+                .clone()
+                .filter(|url| !url.trim().is_empty())
+                .unwrap_or_else(|| DEFAULT_LITE_UPDATE_JSON.to_string()),
+        }
+    }
+
+    fn includes_kasumi_lkm(self) -> bool {
+        matches!(self, Self::Full)
+    }
+
+    fn enable_kasumi(self) -> bool {
+        matches!(self, Self::Full)
+    }
 }
 
 impl Arch {
@@ -60,6 +114,8 @@ enum Commands {
     Build {
         #[arg(long)]
         release: bool,
+        #[arg(long, value_enum, default_value = "full")]
+        flavor: BuildFlavor,
         #[arg(long)]
         skip_webui: bool,
         #[arg(long, value_enum)]
@@ -68,6 +124,14 @@ enum Commands {
         ci: bool,
         #[arg(long)]
         tag: Option<String>,
+    },
+    Notify {
+        #[arg(long, default_value = "output")]
+        output: PathBuf,
+        #[arg(long)]
+        label: Option<String>,
+        #[arg(long)]
+        topic_id: Option<i64>,
     },
     Lint,
 }
@@ -94,6 +158,7 @@ fn main() -> Result<()> {
     match cli.command {
         Commands::Build {
             release,
+            flavor,
             skip_webui,
             arch,
             ci,
@@ -116,9 +181,10 @@ fn main() -> Result<()> {
                 resolve_local_or_ci_version()?
             };
 
-            let notify_plan = resolve_notify_plan(ci, tag.as_deref(), &version_info)?;
+            let notify_plan = resolve_notify_plan(ci, tag.as_deref(), &version_info, flavor)?;
 
-            build_full(
+            build_package(
+                flavor,
                 cargo_release,
                 webui_release,
                 skip_webui,
@@ -126,6 +192,13 @@ fn main() -> Result<()> {
                 &version_info,
                 notify_plan.as_ref(),
             )?;
+        }
+        Commands::Notify {
+            output,
+            label,
+            topic_id,
+        } => {
+            notify_output_dir(&output, label, topic_id)?;
         }
         Commands::Lint => {
             run_clippy()?;
@@ -155,7 +228,8 @@ fn run_clippy() -> Result<()> {
     Ok(())
 }
 
-fn build_full(
+fn build_package(
+    flavor: BuildFlavor,
     cargo_release: bool,
     webui_release: bool,
     skip_webui: bool,
@@ -171,11 +245,11 @@ fn build_full(
     fs::create_dir_all(&stage_dir)?;
 
     if !skip_webui {
-        build_webui(&version_info.clean_version, webui_release)?;
+        build_webui(&version_info.clean_version, webui_release, flavor)?;
     }
 
     for arch in target_archs {
-        compile_core(cargo_release, arch)?;
+        compile_core(cargo_release, arch, flavor)?;
         let bin_name = "hybrid-mount";
         let profile = if cargo_release { "release" } else { "debug" };
         let src_bin = Path::new("target")
@@ -196,16 +270,21 @@ fn build_full(
     let module_src = Path::new("module");
     let options = dir::CopyOptions::new().overwrite(true).content_only(true);
     dir::copy(module_src, &stage_dir, &options)?;
-    stage_kasumi_lkm_assets(&stage_dir)?;
+    if flavor.includes_kasumi_lkm() {
+        stage_kasumi_lkm_assets(&stage_dir)?;
+    }
 
-    generate_module_prop(&stage_dir, version_info)?;
+    generate_module_prop(&stage_dir, version_info, flavor)?;
 
     let gitignore = stage_dir.join(".gitignore");
     if gitignore.exists() {
         fs::remove_file(gitignore)?;
     }
 
-    let zip_file = output_dir.join(format!("Hybrid-Mount-{}.zip", version_info.full_version));
+    let zip_file = output_dir.join(format!(
+        "{}.zip",
+        flavor.zip_stem(&version_info.full_version)
+    ));
     let zip_options = FileOptions::default()
         .compression_method(CompressionMethod::Deflated)
         .compression_level(Some(9));
@@ -233,10 +312,40 @@ fn maybe_notify_build(output_dir: &Path, notify_plan: Option<&NotifyPlan>) -> Re
     Ok(())
 }
 
+fn notify_output_dir(
+    output_dir: &Path,
+    label: Option<String>,
+    topic_id: Option<i64>,
+) -> Result<()> {
+    let event_label = label
+        .or_else(|| {
+            env::var("HYBRID_MOUNT_NOTIFY_LABEL")
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+        })
+        .unwrap_or_else(|| "New Yield (新产物)".to_string());
+    let topic_id = topic_id.or(env::var("HYBRID_MOUNT_NOTIFY_TOPIC_ID")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .map(|value| {
+            value
+                .parse::<i64>()
+                .with_context(|| format!("invalid HYBRID_MOUNT_NOTIFY_TOPIC_ID: {value}"))
+        })
+        .transpose()?);
+    let notify_plan = NotifyPlan {
+        topic_id,
+        event_label,
+    };
+
+    maybe_notify_build(output_dir, Some(&notify_plan))
+}
+
 fn resolve_notify_plan(
     ci: bool,
     tag: Option<&str>,
     version_info: &VersionInfo,
+    flavor: BuildFlavor,
 ) -> Result<Option<NotifyPlan>> {
     let notify_enabled = env_truthy("HYBRID_MOUNT_NOTIFY").unwrap_or(false);
     let topic_override = env::var("HYBRID_MOUNT_NOTIFY_TOPIC_ID")
@@ -257,14 +366,19 @@ fn resolve_notify_plan(
     }
 
     let default_label = if let Some(tag) = tag {
-        format!("丰收 (Harvest) - {tag}")
+        format!("丰收 (Harvest) [{}] - {tag}", flavor.label())
     } else if ci {
         format!(
-            "日常耕作 🌱 (Daily Tilling) - {}",
+            "日常耕作 🌱 (Daily Tilling) [{}] - {}",
+            flavor.label(),
             version_info.full_version
         )
     } else {
-        format!("新产物 (New Yield) - {}", version_info.full_version)
+        format!(
+            "新产物 (New Yield) [{}] - {}",
+            flavor.label(),
+            version_info.full_version
+        )
     };
 
     let default_topic_id = if tag.is_some() {
@@ -346,18 +460,20 @@ fn env_truthy(name: &str) -> Option<bool> {
     ))
 }
 
-fn generate_module_prop(stage_dir: &Path, info: &VersionInfo) -> Result<()> {
+fn generate_module_prop(stage_dir: &Path, info: &VersionInfo, flavor: BuildFlavor) -> Result<()> {
     let config = load_cargo_config()?;
 
     let meta = config.package.metadata.hybrid_mount;
+    let name = flavor.module_name(&meta);
+    let update_json = flavor.update_json(&meta);
     let prop_content = build_meta_shared::render_module_prop(&build_meta_shared::ModulePropData {
         id: "hybrid_mount",
-        name: &meta.name,
+        name: &name,
         version: &info.full_version,
         version_code: &info.version_code,
         author: "Hybrid Mount Developers",
         description: &config.package.description,
-        update_json: &meta.update,
+        update_json: &update_json,
     });
 
     let prop_path = stage_dir.join("module.prop");
@@ -367,8 +483,8 @@ fn generate_module_prop(stage_dir: &Path, info: &VersionInfo) -> Result<()> {
     Ok(())
 }
 
-fn build_webui(version: &str, is_release: bool) -> Result<()> {
-    generate_webui_constants(version, is_release)?;
+fn build_webui(version: &str, is_release: bool, flavor: BuildFlavor) -> Result<()> {
+    generate_webui_constants(version, is_release, flavor)?;
     let webui_dir = Path::new("webui");
     let pnpm = if cfg!(windows) { "pnpm.cmd" } else { "pnpm" };
     let status = Command::new(pnpm)
@@ -388,11 +504,12 @@ fn build_webui(version: &str, is_release: bool) -> Result<()> {
     Ok(())
 }
 
-fn generate_webui_constants(version: &str, is_release: bool) -> Result<()> {
+fn generate_webui_constants(version: &str, is_release: bool, flavor: BuildFlavor) -> Result<()> {
     let path = Path::new("webui/src/lib/constants_gen.ts");
     let content = build_meta_shared::render_webui_constants(
         version,
         is_release,
+        flavor.enable_kasumi(),
         build_meta_shared::defs::CONFIG_FILE,
         build_meta_shared::defs::STATE_FILE,
         &format!(
@@ -407,7 +524,7 @@ fn generate_webui_constants(version: &str, is_release: bool) -> Result<()> {
     Ok(())
 }
 
-fn compile_core(release: bool, _arch: Arch) -> Result<()> {
+fn compile_core(release: bool, _arch: Arch, flavor: BuildFlavor) -> Result<()> {
     let mut cmd = Command::new("cargo");
     cmd.args([
         "+nightly",
@@ -427,6 +544,9 @@ fn compile_core(release: bool, _arch: Arch) -> Result<()> {
     .env("RUSTFLAGS", "-C default-linker-libraries");
     if release {
         cmd.arg("-r");
+    }
+    if !flavor.enable_kasumi() {
+        cmd.arg("--no-default-features");
     }
     let mut ret = cmd.spawn()?;
     let status = ret.wait()?;

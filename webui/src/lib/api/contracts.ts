@@ -13,7 +13,7 @@ export interface InitPayload {
   status: unknown;
   config: unknown;
   version: string;
-  kasumi_status: unknown;
+  kasumi_status?: unknown;
   system_info: unknown;
 }
 

@@ -16,6 +16,8 @@ Hybrid Mount 是面向 **KernelSU** 与 **APatch** 的挂载编排元模块。
 
 内置 **SolidJS WebUI**，支持图形化管理、实时状态监控和配置编辑。
 
+发布包现在分为两个版本：`full` 包含 Kasumi 的前后端与 LKM；`lite` 完全不包含 Kasumi，不会把 Kasumi 编译进包内。除非另有说明，下面内容默认描述的是 `full` 版本。
+
 **[🇺🇸 English](README.md)**
 
 ---
@@ -41,7 +43,7 @@ Hybrid Mount 是面向 **KernelSU** 与 **APatch** 的挂载编排元模块。
 
 - **三种后端，统一策略引擎** — 支持按路径粒度分配 OverlayFS、Magic Mount 或 Kasumi。
 - **确定性规划** — 冲突在计划阶段检出，而非启动时随机出现。
-- **内置 WebUI** — 通过浏览器或 WebView 管理模块、编辑配置、监控运行时状态、控制 Kasumi 特性。
+- **内置 WebUI** — 通过浏览器或 WebView 管理模块、编辑配置、监控运行时状态、在 full 版本中控制 Kasumi 特性。
 - **Kasumi 运行时集成** — LKM 自动加载、mirror 路由、mount 隐藏、maps/statfs 伪装、UID 隐藏、uname 伪装、kstat 规则。
 - **配置缓存** — 运行时配置缓存，支持增量补丁和即时生效。
 - **恢复友好** — 残留运行时文件自动清理；配置错误时可通过 `api config-reset` 重置。
@@ -54,7 +56,7 @@ Hybrid Mount 是面向 **KernelSU** 与 **APatch** 的挂载编排元模块。
 ### 安装
 
 1. 在设备上安装 [KernelSU](https://kernelsu.org/) 或 [APatch](https://apatch.dev/)。
-2. 从 [GitHub Releases](https://github.com/Hybrid-Mount/meta-hybrid_mount/releases) 下载最新版本的 Hybrid Mount 刷入包。
+2. 从 [GitHub Releases](https://github.com/Hybrid-Mount/meta-hybrid_mount/releases) 下载对应的 Hybrid Mount `full` 或 `lite` 版本 ZIP。
 3. 通过 Root 管理器的模块安装器刷入 ZIP。
 4. 重启设备。Hybrid Mount 将自动检测运行环境并应用默认 overlay 策略。
 
@@ -396,8 +398,11 @@ module/            模块打包脚本与静态资源
 ### 命令
 
 ```bash
-# 完整构建（二进制 + WebUI）→ output/
-cargo run -p xtask -- build --release
+# Full 版本构建（二进制 + WebUI + Kasumi）→ output/
+cargo run -p xtask -- build --release --flavor full
+
+# Lite 版本构建（二进制 + WebUI，不含 Kasumi）→ output/
+cargo run -p xtask -- build --release --flavor lite
 
 # 仅构建二进制（跳过 WebUI）
 cargo run -p xtask -- build --release --skip-webui
@@ -405,7 +410,10 @@ cargo run -p xtask -- build --release --skip-webui
 # 本地 arm64 调试构建
 ./scripts/build-local.sh
 
-# 打入预编译的 Kasumi LKM .ko 资产
+# 本地 lite 调试构建
+./scripts/build-local.sh --lite
+
+# 打入预编译的 Kasumi LKM .ko 资产（仅 full 版本）
 ./scripts/build-local.sh --release --kasumi-lkm-dir /path/to/kasumi-lkm
 
 # WebUI 开发服务器（热重载）
@@ -431,7 +439,7 @@ Release 使用 `opt-level = 3`、`lto = "fat"`、`codegen-units = 1`、`strip = 
 - **挂载来源自动检测**：新安装会默认自动检测运行环境。仅在自动检测失败时才需显式设置 `mountsource`。
 - **配置错误恢复**：执行 `hybrid-mount api config-reset` 重置为默认配置，然后逐步恢复规则。也可使用 `gen-config` 重新生成配置文件。
 - **配置缓存**：运行时维护配置缓存。使用 `api config-patch --apply-runtime` 使更改即时生效，或重启守护进程。
-- **Kasumi LKM**：LKM 必须与当前内核匹配。如果自动检测的 KMI 不正确，请使用 `lkm_kmi_override` 覆盖。
+- **Kasumi LKM（仅 full 版本）**：LKM 必须与当前内核匹配。如果自动检测的 KMI 不正确，请使用 `lkm_kmi_override` 覆盖。
 - **`kasumi clear`**：清除运行时状态并释放内核连接。已下发到内核的规则在 LKM 重载前可能仍然有效。
 - **减小体积**：建议优先从依赖特性裁剪和 release profile 调优入手，再考虑重构。
 

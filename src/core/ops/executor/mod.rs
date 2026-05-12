@@ -20,13 +20,14 @@ use std::{collections::BTreeSet, path::Path};
 
 use anyhow::{Result, bail};
 
+#[cfg(feature = "kasumi")]
+use crate::core::kasumi_coordinator::KasumiCoordinator;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::mount::umount_mgr;
 use crate::{
     conf::config,
     core::{
         inventory::Module,
-        kasumi_coordinator::KasumiCoordinator,
         ops::plan::MountPlan,
         recovery::{FailureStage, ModuleStageFailure},
         runtime_state::MountStatistics,
@@ -67,8 +68,10 @@ impl Executor {
         let mut final_overlay_partitions: BTreeSet<String> = BTreeSet::new();
         let planned_kasumi_ids = plan.kasumi_module_ids.clone();
         let mut mount_stats = MountStatistics::default();
+        #[cfg(feature = "kasumi")]
         let kasumi = KasumiCoordinator::new(config);
 
+        #[cfg(feature = "kasumi")]
         let kasumi_available = if config.kasumi.enabled {
             kasumi.reset_runtime().map_err(|err| {
                 ModuleStageFailure::new(
@@ -85,6 +88,8 @@ impl Executor {
             );
             false
         };
+        #[cfg(not(feature = "kasumi"))]
+        let kasumi_available = false;
         if !kasumi_available && !planned_kasumi_ids.is_empty() {
             return Err(ModuleStageFailure::new(
                 FailureStage::Execute,
@@ -105,7 +110,12 @@ impl Executor {
                     op.target,
                     op.lowerdirs.len()
                 );
-                match overlay::mount_overlay(op, config, &kasumi) {
+                #[cfg(feature = "kasumi")]
+                let overlay_result = overlay::mount_overlay(op, config, &kasumi);
+                #[cfg(not(feature = "kasumi"))]
+                let overlay_result = overlay::mount_overlay(op, config);
+
+                match overlay_result {
                     Ok(ids) => {
                         crate::scoped_log!(
                             info,
@@ -237,6 +247,7 @@ impl Executor {
             );
         }
 
+        #[cfg(feature = "kasumi")]
         let kasumi_runtime_enabled = if config.kasumi.enabled {
             kasumi.apply_runtime(plan, modules).map_err(|err| {
                 ModuleStageFailure::new(
@@ -253,6 +264,8 @@ impl Executor {
             );
             false
         };
+        #[cfg(not(feature = "kasumi"))]
+        let kasumi_runtime_enabled = false;
 
         #[cfg(any(target_os = "linux", target_os = "android"))]
         if !config.disable_umount {

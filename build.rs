@@ -1,6 +1,10 @@
-use std::{env, fs, io::Write, path::PathBuf};
+#[cfg(feature = "kasumi")]
+use std::{env, path::PathBuf};
+use std::{fs, io::Write};
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::Result;
+#[cfg(feature = "kasumi")]
+use anyhow::{Context, anyhow};
 
 #[path = "xtask/src/build_meta_shared.rs"]
 mod build_meta_shared;
@@ -19,16 +23,19 @@ fn main() -> Result<()> {
 
     let data = load_cargo_config()?;
 
+    #[cfg(feature = "kasumi")]
     gen_kasumi_uapi_bindings()?;
     gen_module_prop(&data)?;
 
     Ok(())
 }
 
+#[cfg(feature = "kasumi")]
 fn kasumi_uapi_header_path() -> PathBuf {
     PathBuf::from("src/sys/kasumi_uapi.h")
 }
 
+#[cfg(feature = "kasumi")]
 fn gen_kasumi_uapi_bindings() -> Result<()> {
     let header = kasumi_uapi_header_path();
     let header = fs::canonicalize(&header)

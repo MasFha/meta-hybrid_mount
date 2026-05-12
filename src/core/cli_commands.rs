@@ -14,12 +14,11 @@
 
 use anyhow::{Context, Result};
 
+#[cfg(feature = "kasumi")]
+use crate::conf::cli::{HideCommands, KasumiCommands, KasumiRuleCommands, LkmCommands};
 use crate::{
     conf::{
-        cli::{
-            ApiCommands, Cli, Commands, DaemonCommands, HideCommands, KasumiCommands,
-            KasumiRuleCommands, LkmCommands,
-        },
+        cli::{ApiCommands, Cli, Commands, DaemonCommands},
         cli_handlers, loader,
     },
     core::{
@@ -60,8 +59,11 @@ pub fn run(cli: &Cli, command: &Commands) -> Result<()> {
             }
             _ => run_api_command(|| dispatch(cli, daemon_daemon_command(command))),
         },
+        #[cfg(feature = "kasumi")]
         Commands::Lkm { command } => dispatch(cli, lkm_daemon_command(command)),
+        #[cfg(feature = "kasumi")]
         Commands::Hide { command } => dispatch(cli, hide_daemon_command(command)),
+        #[cfg(feature = "kasumi")]
         Commands::Kasumi { command } => dispatch(cli, kasumi_daemon_command(command)),
     }
 }
@@ -91,15 +93,20 @@ fn api_daemon_command(command: &ApiCommands) -> Result<Option<DaemonCommand>> {
             modules: serde_json::from_str(modules)
                 .context("Failed to parse modules JSON payload")?,
         },
+        #[cfg(feature = "kasumi")]
         ApiCommands::Lkm => DaemonCommand::ApiLkm,
+        #[cfg(feature = "kasumi")]
         ApiCommands::Features => return Ok(None),
+        #[cfg(feature = "kasumi")]
         ApiCommands::Hooks => DaemonCommand::ApiHooks,
         ApiCommands::KernelUname => DaemonCommand::ApiKernelUname,
         ApiCommands::OpenUrl { url } => DaemonCommand::ApiOpenUrl { url: url.clone() },
         ApiCommands::Reboot => DaemonCommand::ApiReboot,
+        #[cfg(feature = "kasumi")]
         ApiCommands::KasumiMapsAdd { rule } => DaemonCommand::ApiKasumiMapsAdd {
             rule: parse_json(rule, "Failed to parse Kasumi maps rule JSON payload")?,
         },
+        #[cfg(feature = "kasumi")]
         ApiCommands::KasumiMapsClear => DaemonCommand::ApiKasumiMapsClear,
     }))
 }
@@ -114,6 +121,7 @@ fn daemon_daemon_command(command: &DaemonCommands) -> DaemonCommand {
     }
 }
 
+#[cfg(feature = "kasumi")]
 fn lkm_daemon_command(command: &LkmCommands) -> DaemonCommand {
     match command {
         LkmCommands::Load => DaemonCommand::LkmLoad,
@@ -122,6 +130,7 @@ fn lkm_daemon_command(command: &LkmCommands) -> DaemonCommand {
     }
 }
 
+#[cfg(feature = "kasumi")]
 fn hide_daemon_command(command: &HideCommands) -> DaemonCommand {
     match command {
         HideCommands::List => DaemonCommand::HideList,
@@ -131,6 +140,7 @@ fn hide_daemon_command(command: &HideCommands) -> DaemonCommand {
     }
 }
 
+#[cfg(feature = "kasumi")]
 fn kasumi_daemon_command(command: &KasumiCommands) -> DaemonCommand {
     match command {
         KasumiCommands::Status => DaemonCommand::KasumiStatus,
@@ -160,6 +170,7 @@ fn kasumi_daemon_command(command: &KasumiCommands) -> DaemonCommand {
     }
 }
 
+#[cfg(feature = "kasumi")]
 fn kasumi_rule_daemon_command(command: &KasumiRuleCommands) -> DaemonCommand {
     match command {
         KasumiRuleCommands::Add {

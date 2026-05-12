@@ -22,11 +22,12 @@ use std::{
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "kasumi")]
+use crate::mount::kasumi;
 use crate::{
     conf::config::Config,
     core::ops::executor::ExecutionResult,
     defs,
-    mount::kasumi,
     sys::fs::{atomic_write, xattr},
 };
 
@@ -348,7 +349,13 @@ impl RuntimeState {
             }
         };
 
+        #[cfg(feature = "kasumi")]
         let kasumi = kasumi::collect_runtime_info(config);
+        #[cfg(not(feature = "kasumi"))]
+        let kasumi = {
+            let _ = config;
+            KasumiRuntimeInfo::default()
+        };
         let mut state = Self::new(
             storage_mode.as_str().to_string(),
             mount_point.to_path_buf(),

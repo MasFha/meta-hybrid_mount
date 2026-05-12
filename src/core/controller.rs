@@ -22,6 +22,10 @@ use anyhow::Result;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rustix::mount::{UnmountFlags, unmount as umount};
 
+#[cfg(feature = "kasumi")]
+use crate::core::kasumi_coordinator::KasumiCoordinator;
+#[cfg(feature = "kasumi")]
+use crate::core::recovery::ModuleStageFailure;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::sys::mount::is_mounted;
 use crate::{
@@ -29,13 +33,11 @@ use crate::{
     core::{
         backend_capabilities::BackendCapabilities,
         inventory::{self},
-        kasumi_coordinator::KasumiCoordinator,
         ops::{
             executor::{self},
             plan::MountPlan,
             prepare,
         },
-        recovery::ModuleStageFailure,
         runtime_finalization,
         storage::StorageHandle,
     },
@@ -148,20 +150,23 @@ impl MountController<StorageReady> {
             plan.kasumi_module_ids.len()
         );
 
-        let kasumi = KasumiCoordinator::new(&self.config);
-        kasumi
-            .prepare_mirror_storage(
-                &self.backend_capabilities,
-                &modules,
-                &plan,
-                self.state.handle.mount_point(),
-            )
-            .map_err(|err| {
-                ModuleStageFailure::sync(
-                    plan.kasumi_module_ids.clone(),
-                    anyhow::anyhow!("Failed to prepare Kasumi mirror storage: {:#}", err),
+        #[cfg(feature = "kasumi")]
+        {
+            let kasumi = KasumiCoordinator::new(&self.config);
+            kasumi
+                .prepare_mirror_storage(
+                    &self.backend_capabilities,
+                    &modules,
+                    &plan,
+                    self.state.handle.mount_point(),
                 )
-            })?;
+                .map_err(|err| {
+                    ModuleStageFailure::sync(
+                        plan.kasumi_module_ids.clone(),
+                        anyhow::anyhow!("Failed to prepare Kasumi mirror storage: {:#}", err),
+                    )
+                })?;
+        }
 
         Ok(MountController {
             config: self.config,

@@ -12,11 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#[cfg(feature = "kasumi")]
+use std::os::unix::fs::FileTypeExt;
 use std::{
     collections::HashMap,
     fs,
     net::TcpStream,
-    os::unix::fs::{FileTypeExt, MetadataExt},
+    os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
     process::Command,
     sync::{
@@ -34,9 +36,14 @@ use super::{
     http::{self, WebuiHttpSession},
 };
 use crate::{
-    conf::{config::Config, schema},
-    core::{api, inventory, runtime_state::RuntimeState, user_hide_rules},
+    conf::config::Config,
+    core::{api, inventory, runtime_state::RuntimeState},
     defs,
+};
+#[cfg(feature = "kasumi")]
+use crate::{
+    conf::schema,
+    core::user_hide_rules,
     mount::kasumi as kasumi_mount,
     sys::{kasumi, lkm},
 };
@@ -183,6 +190,7 @@ impl<'a> CommandContext<'a> {
         self.refresh_current(json!({ "message": message }))
     }
 
+    #[cfg(feature = "kasumi")]
     fn invalidate_and_refresh_message(&self, message: &'static str) -> Result<Value> {
         kasumi::invalidate_status_cache();
         self.refresh_message(message)
@@ -228,13 +236,23 @@ pub(super) fn dispatch_command(ctx: &CommandContext<'_>, command: DaemonCommand)
             let (status_value, snapshot) = cached_status_and_snapshot(state)?;
             let config_value = to_value(config)?;
             let version_value = to_value(&api::build_version_payload())?;
-            let kasumi_status_value = build_kasumi_runtime_json(config, &snapshot)?;
             let system_info_value = to_value(&api::build_system_info_payload(&snapshot))?;
+            #[cfg(feature = "kasumi")]
+            {
+                let kasumi_status_value = build_kasumi_runtime_json(config, &snapshot)?;
+                return to_value(&json!({
+                    "status": status_value,
+                    "config": config_value,
+                    "version": version_value,
+                    "kasumi_status": kasumi_status_value,
+                    "system_info": system_info_value,
+                }));
+            }
+            #[cfg(not(feature = "kasumi"))]
             to_value(&json!({
                 "status": status_value,
                 "config": config_value,
                 "version": version_value,
-                "kasumi_status": kasumi_status_value,
                 "system_info": system_info_value,
             }))
         }
@@ -308,7 +326,9 @@ pub(super) fn dispatch_command(ctx: &CommandContext<'_>, command: DaemonCommand)
             ctx.cache_config(config.clone())?;
             ctx.refresh(&config, payload)
         }
+        #[cfg(feature = "kasumi")]
         DaemonCommand::ApiLkm => to_value(&api::build_lkm_payload(config)),
+        #[cfg(feature = "kasumi")]
         DaemonCommand::ApiHooks => {
             kasumi_mount::require_live(config, "read Kasumi hooks")?;
             to_value(&kasumi_mount::hook_lines()?)
@@ -322,6 +342,7 @@ pub(super) fn dispatch_command(ctx: &CommandContext<'_>, command: DaemonCommand)
             reboot_device()?;
             to_value(&json!({ "reboot": true }))
         }
+        #[cfg(feature = "kasumi")]
         DaemonCommand::ApiKasumiMapsAdd { rule } => {
             let updated = add_kasumi_maps_config_rule(config_path, rule)?;
             ctx.cache_config(updated.clone())?;
@@ -336,6 +357,7 @@ pub(super) fn dispatch_command(ctx: &CommandContext<'_>, command: DaemonCommand)
                 }),
             )
         }
+        #[cfg(feature = "kasumi")]
         DaemonCommand::ApiKasumiMapsClear => {
             let mut updated = load_runtime_config(config_cache, config_path)?
                 .as_ref()
@@ -353,10 +375,12 @@ pub(super) fn dispatch_command(ctx: &CommandContext<'_>, command: DaemonCommand)
                 }),
             )
         }
+        #[cfg(feature = "kasumi")]
         DaemonCommand::KasumiStatus => {
             let snapshot = runtime_snapshot(state);
             build_kasumi_runtime_json(config, &snapshot)
         }
+        #[cfg(feature = "kasumi")]
         DaemonCommand::KasumiList => {
             let payload = if kasumi_mount::can_operate(config) {
                 api::parse_kasumi_rule_listing(&kasumi::list_rules()?)
@@ -365,17 +389,23 @@ pub(super) fn dispatch_command(ctx: &CommandContext<'_>, command: DaemonCommand)
             };
             to_value(&payload)
         }
+        #[cfg(feature = "kasumi")]
         DaemonCommand::KasumiVersion => {
             let snapshot = runtime_snapshot(state);
             to_value(&api::build_kasumi_version_payload(config, &snapshot))
         }
+        #[cfg(feature = "kasumi")]
         DaemonCommand::KasumiFeatures => to_value(&api::build_features_payload()),
+        #[cfg(feature = "kasumi")]
         DaemonCommand::KasumiHooks => to_value(&kasumi_mount::hook_lines()?),
+        #[cfg(feature = "kasumi")]
         DaemonCommand::KasumiApplyConfigRuntime => {
             let applied = apply_runtime_config(config)?;
             ctx.refresh_current(json!({ "applied": applied }))
         }
+        #[cfg(feature = "kasumi")]
         DaemonCommand::HideList => to_value(&user_hide_rules::load_user_hide_rules()?),
+        #[cfg(feature = "kasumi")]
         DaemonCommand::HideAdd { path } => {
             let added = user_hide_rules::add_user_hide_rule(&path)?;
             if added && kasumi_mount::can_operate(config) {
@@ -383,44 +413,55 @@ pub(super) fn dispatch_command(ctx: &CommandContext<'_>, command: DaemonCommand)
             }
             ctx.refresh_current(json!({ "added": added, "path": path }))
         }
+        #[cfg(feature = "kasumi")]
         DaemonCommand::HideRemove { path } => {
             let removed = user_hide_rules::remove_user_hide_rule(&path)?;
             ctx.refresh_current(json!({ "removed": removed, "path": path }))
         }
+        #[cfg(feature = "kasumi")]
         DaemonCommand::HideApply => {
             kasumi_mount::require_live(config, "apply user hide rules")?;
             let (applied, failed) = user_hide_rules::apply_user_hide_rules()?;
             ctx.refresh_current(json!({ "applied": applied, "failed": failed }))
         }
+        #[cfg(feature = "kasumi")]
         DaemonCommand::LkmStatus => to_value(&api::build_lkm_payload(config)),
+        #[cfg(feature = "kasumi")]
         DaemonCommand::LkmLoad => {
             lkm::load(&config.kasumi)?;
             ctx.invalidate_and_refresh_message("Kasumi LKM loaded.")
         }
+        #[cfg(feature = "kasumi")]
         DaemonCommand::LkmUnload => {
             lkm::unload(&config.kasumi)?;
             ctx.invalidate_and_refresh_message("Kasumi LKM unloaded.")
         }
+        #[cfg(feature = "kasumi")]
         DaemonCommand::KasumiClear => {
             kasumi::clear_rules()?;
             ctx.refresh_message("Kasumi rules cleared.")
         }
+        #[cfg(feature = "kasumi")]
         DaemonCommand::KasumiReleaseConnection => {
             kasumi::release_connection();
             ctx.refresh_message("Released cached Kasumi client connection.")
         }
+        #[cfg(feature = "kasumi")]
         DaemonCommand::KasumiInvalidateCache => {
             kasumi::invalidate_status_cache();
             ctx.refresh_message("Invalidated cached Kasumi status.")
         }
+        #[cfg(feature = "kasumi")]
         DaemonCommand::KasumiFixMounts => {
             kasumi::fix_mounts()?;
             ctx.refresh_message("Kasumi mount ordering fixed.")
         }
+        #[cfg(feature = "kasumi")]
         DaemonCommand::KasumiRestoreUnameGlobal => {
             kasumi::restore_uname_global()?;
             ctx.refresh_message("Kasumi global uname restored.")
         }
+        #[cfg(feature = "kasumi")]
         DaemonCommand::KasumiSetUname {
             mode,
             release,
@@ -435,6 +476,7 @@ pub(super) fn dispatch_command(ctx: &CommandContext<'_>, command: DaemonCommand)
                 "version": version,
             }))
         }
+        #[cfg(feature = "kasumi")]
         DaemonCommand::KasumiClearUname { mode } => {
             let mode = parse_uname_mode(&mode)?;
             match mode {
@@ -448,6 +490,7 @@ pub(super) fn dispatch_command(ctx: &CommandContext<'_>, command: DaemonCommand)
                 "mode": display_uname_mode(mode),
             }))
         }
+        #[cfg(feature = "kasumi")]
         DaemonCommand::KasumiRuleAdd {
             target,
             source,
@@ -462,6 +505,7 @@ pub(super) fn dispatch_command(ctx: &CommandContext<'_>, command: DaemonCommand)
                 "file_type": file_type,
             }))
         }
+        #[cfg(feature = "kasumi")]
         DaemonCommand::KasumiRuleMerge { target, source } => {
             kasumi::add_merge_rule(&target, &source)?;
             ctx.refresh_current(json!({
@@ -470,6 +514,7 @@ pub(super) fn dispatch_command(ctx: &CommandContext<'_>, command: DaemonCommand)
                 "source": source,
             }))
         }
+        #[cfg(feature = "kasumi")]
         DaemonCommand::KasumiRuleHide { path } => {
             kasumi::hide_path(&path)?;
             ctx.refresh_current(json!({
@@ -477,6 +522,7 @@ pub(super) fn dispatch_command(ctx: &CommandContext<'_>, command: DaemonCommand)
                 "path": path,
             }))
         }
+        #[cfg(feature = "kasumi")]
         DaemonCommand::KasumiRuleDelete { path } => {
             kasumi::delete_rule(&path)?;
             ctx.refresh_current(json!({
@@ -484,6 +530,7 @@ pub(super) fn dispatch_command(ctx: &CommandContext<'_>, command: DaemonCommand)
                 "path": path,
             }))
         }
+        #[cfg(feature = "kasumi")]
         DaemonCommand::KasumiRuleAddDir {
             target_base,
             source_dir,
@@ -495,6 +542,7 @@ pub(super) fn dispatch_command(ctx: &CommandContext<'_>, command: DaemonCommand)
                 "source_dir": source_dir,
             }))
         }
+        #[cfg(feature = "kasumi")]
         DaemonCommand::KasumiRuleRemoveDir {
             target_base,
             source_dir,
@@ -667,6 +715,7 @@ fn reboot_device() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "kasumi")]
 fn add_kasumi_maps_config_rule(config_path: &Path, rule: Value) -> Result<Config> {
     let mut config = load_runtime_config_uncached(config_path)?;
     let rule: crate::conf::schema::KasumiMapsRuleConfig =
@@ -685,10 +734,16 @@ fn save_and_apply_runtime_config(config: &Config, config_path: &Path) -> Result<
     apply_runtime_config(config)
 }
 
+#[cfg(feature = "kasumi")]
 fn apply_runtime_config(config: &Config) -> Result<bool> {
     let applied = kasumi_mount::apply_runtime_config(config)?;
     kasumi::invalidate_status_cache();
     Ok(applied)
+}
+
+#[cfg(not(feature = "kasumi"))]
+fn apply_runtime_config(_config: &Config) -> Result<bool> {
+    Ok(false)
 }
 
 fn refresh_runtime_snapshot(
@@ -697,7 +752,14 @@ fn refresh_runtime_snapshot(
     sse_clients: &Arc<Mutex<Vec<TcpStream>>>,
 ) -> Result<()> {
     let mut guard = state.lock().expect("daemon state poisoned");
-    guard.kasumi = kasumi_mount::collect_runtime_info(config);
+    #[cfg(feature = "kasumi")]
+    {
+        guard.kasumi = kasumi_mount::collect_runtime_info(config);
+    }
+    #[cfg(not(feature = "kasumi"))]
+    {
+        let _ = config;
+    }
     guard.set_daemon_state(true, defs::SOCKET_FILE);
     guard
         .status_value()
@@ -708,6 +770,7 @@ fn refresh_runtime_snapshot(
     Ok(())
 }
 
+#[cfg(feature = "kasumi")]
 fn parse_uname_mode(mode: &str) -> Result<schema::KasumiUnameMode> {
     match mode {
         "scoped" => Ok(schema::KasumiUnameMode::Scoped),
@@ -716,6 +779,7 @@ fn parse_uname_mode(mode: &str) -> Result<schema::KasumiUnameMode> {
     }
 }
 
+#[cfg(feature = "kasumi")]
 fn apply_uname(mode: schema::KasumiUnameMode, release: &str, version: &str) -> Result<()> {
     let mut uname = kasumi::KasumiSpoofUname::default();
     if !release.is_empty() {
@@ -731,6 +795,7 @@ fn apply_uname(mode: schema::KasumiUnameMode, release: &str, version: &str) -> R
     }
 }
 
+#[cfg(feature = "kasumi")]
 fn display_uname_mode(mode: schema::KasumiUnameMode) -> &'static str {
     match mode {
         schema::KasumiUnameMode::Scoped => "scoped",
@@ -738,6 +803,7 @@ fn display_uname_mode(mode: schema::KasumiUnameMode) -> &'static str {
     }
 }
 
+#[cfg(feature = "kasumi")]
 fn detect_rule_file_type(path: &Path) -> Result<i32> {
     let metadata = fs::symlink_metadata(path)
         .with_context(|| format!("failed to read source metadata for {}", path.display()))?;
@@ -762,6 +828,7 @@ fn detect_rule_file_type(path: &Path) -> Result<i32> {
     }
 }
 
+#[cfg(feature = "kasumi")]
 fn build_kasumi_runtime_json(config: &Config, runtime_state: &RuntimeState) -> Result<Value> {
     let kasumi_info = kasumi_mount::collect_runtime_info(config);
     to_value(&json!({

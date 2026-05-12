@@ -1,11 +1,11 @@
-import { createSignal, createEffect, createMemo, For } from "solid-js";
+import { createSignal, createEffect, createMemo, For, Show } from "solid-js";
 import { uiStore } from "../lib/stores/uiStore";
 import { configStore } from "../lib/stores/configStore";
 import { sysStore } from "../lib/stores/sysStore";
-import { kasumiStore } from "../lib/stores/kasumiStore";
 import { moduleStore } from "../lib/stores/moduleStore";
 import { ICONS } from "../lib/constants";
-import { API } from "../lib/api";
+import { ENABLE_KASUMI } from "../lib/constants_gen";
+import { features } from "../lib/features";
 import { getCookie, setCookie } from "../lib/cookies";
 import "./ConfigTab.css";
 import "@material/web/textfield/outlined-text-field.js";
@@ -104,7 +104,7 @@ export default function ConfigTab() {
   }
 
   async function handleKasumiToggle() {
-    const wantsEnable = !kasumiStore.enabled;
+    const wantsEnable = !features.kasumiEnabled;
 
     if (wantsEnable && getCookie(KASUMI_WARNING_COOKIE) !== "1") {
       setShowKasumiWarning(true);
@@ -118,9 +118,17 @@ export default function ConfigTab() {
     setShowKasumiWarning(false);
     setKasumiPending(true);
     try {
+      const [{ API }, { kasumiStore }] = await Promise.all([
+        import("../lib/api"),
+        import("../lib/stores/kasumiStore"),
+      ]);
       await API.setKasumiEnabled(enabled);
       kasumiStore.setEnabledOptimistic(enabled);
       void kasumiStore.refreshStatus(false);
+      features.setKasumiStatus(
+        kasumiStore.enabled,
+        Boolean(kasumiStore.status?.available),
+      );
       if (enabled) {
         setCookie(KASUMI_WARNING_COOKIE, "1");
       }
@@ -164,30 +172,32 @@ export default function ConfigTab() {
 
   return (
     <>
-      <div class="dialog-container">
-        <md-dialog
-          open={showKasumiWarning()}
-          onclose={() => setShowKasumiWarning(false)}
-          class="transparent-scrim"
-        >
-          <div slot="headline">
-            {uiStore.L.config?.kasumiWarningTitle ??
-              "Enable Experimental Kasumi?"}
-          </div>
-          <div slot="content">
-            {uiStore.L.config?.kasumiWarningBody ??
-              "Kasumi is experimental. Enabling it will expose the Kasumi tab, allow Kasumi-backed module routing, and permit LKM autoload. Continue only if you know what you are testing."}
-          </div>
-          <div slot="actions">
-            <md-text-button onClick={() => setShowKasumiWarning(false)}>
-              {uiStore.L.common?.cancel ?? "Cancel"}
-            </md-text-button>
-            <md-text-button onClick={() => applyKasumiToggle(true)}>
-              {uiStore.L.config?.kasumiEnableConfirm ?? "Enable Kasumi"}
-            </md-text-button>
-          </div>
-        </md-dialog>
-      </div>
+      <Show when={ENABLE_KASUMI}>
+        <div class="dialog-container">
+          <md-dialog
+            open={showKasumiWarning()}
+            onclose={() => setShowKasumiWarning(false)}
+            class="transparent-scrim"
+          >
+            <div slot="headline">
+              {uiStore.L.config?.kasumiWarningTitle ??
+                "Enable Experimental Kasumi?"}
+            </div>
+            <div slot="content">
+              {uiStore.L.config?.kasumiWarningBody ??
+                "Kasumi is experimental. Enabling it will expose the Kasumi tab, allow Kasumi-backed module routing, and permit LKM autoload. Continue only if you know what you are testing."}
+            </div>
+            <div slot="actions">
+              <md-text-button onClick={() => setShowKasumiWarning(false)}>
+                {uiStore.L.common?.cancel ?? "Cancel"}
+              </md-text-button>
+              <md-text-button onClick={() => applyKasumiToggle(true)}>
+                {uiStore.L.config?.kasumiEnableConfirm ?? "Enable Kasumi"}
+              </md-text-button>
+            </div>
+          </md-dialog>
+        </div>
+      </Show>
 
       <div class="config-container">
         <section class="config-group">
@@ -408,45 +418,49 @@ export default function ConfigTab() {
           </div>
         </section>
 
-        <section class="config-group">
-          <div class="webui-label">
-            {uiStore.L.config?.experimentalFeatures || "Experimental Features"}
-          </div>
-          <div class="options-grid">
-            <button
-              class={`option-tile clickable secondary ${kasumiStore.enabled ? "active" : ""}`}
-              onClick={handleKasumiToggle}
-              disabled={kasumiPending() || kasumiStore.loading}
-              type="button"
-              aria-pressed={kasumiStore.enabled}
-              aria-label={
-                uiStore.L.config?.kasumiMasterSwitch || "Enable Kasumi"
-              }
-            >
-              <md-ripple></md-ripple>
-              <div class="tile-top">
-                <div class="tile-icon">
-                  <md-icon>
-                    <svg viewBox="0 0 24 24">
-                      <path
-                        d={
-                          kasumiStore.enabled
-                            ? ICONS.snowflake_filled
-                            : ICONS.snowflake
-                        }
-                      />
-                    </svg>
-                  </md-icon>
+        <Show when={ENABLE_KASUMI}>
+          <section class="config-group">
+            <div class="webui-label">
+              {uiStore.L.config?.experimentalFeatures ||
+                "Experimental Features"}
+            </div>
+            <div class="options-grid">
+              <button
+                class={`option-tile clickable secondary ${features.kasumiEnabled ? "active" : ""}`}
+                onClick={handleKasumiToggle}
+                disabled={kasumiPending()}
+                type="button"
+                aria-pressed={features.kasumiEnabled}
+                aria-label={
+                  uiStore.L.config?.kasumiMasterSwitch || "Enable Kasumi"
+                }
+              >
+                <md-ripple></md-ripple>
+                <div class="tile-top">
+                  <div class="tile-icon">
+                    <md-icon>
+                      <svg viewBox="0 0 24 24">
+                        <path
+                          d={
+                            features.kasumiEnabled
+                              ? ICONS.snowflake_filled
+                              : ICONS.snowflake
+                          }
+                        />
+                      </svg>
+                    </md-icon>
+                  </div>
                 </div>
-              </div>
-              <div class="tile-bottom">
-                <span class="tile-label">
-                  {uiStore.L.config?.kasumiMasterTitle ?? "Experimental Kasumi"}
-                </span>
-              </div>
-            </button>
-          </div>
-        </section>
+                <div class="tile-bottom">
+                  <span class="tile-label">
+                    {uiStore.L.config?.kasumiMasterTitle ??
+                      "Experimental Kasumi"}
+                  </span>
+                </div>
+              </button>
+            </div>
+          </section>
+        </Show>
       </div>
     </>
   );

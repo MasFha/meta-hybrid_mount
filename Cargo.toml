@@ -29,7 +29,12 @@ repository = "https://github.com/Hybrid-Mount/meta-hybrid_mount"
 [package.metadata.hybrid_mount]
 name = "Hybrid Mount"
 update = "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/main/update.json"
+lite_name = "Hybrid Mount Lite"
+lite_update = "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/main/update-lite.json"
 
+[features]
+default = ["kasumi"]
+kasumi = []
 
 [dependencies]
 anyhow = "1"

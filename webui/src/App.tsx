@@ -12,7 +12,8 @@ import {
 import { uiStore } from "./lib/stores/uiStore";
 import { configStore } from "./lib/stores/configStore";
 import { sysStore } from "./lib/stores/sysStore";
-import { kasumiStore } from "./lib/stores/kasumiStore";
+import { features } from "./lib/features";
+import { ENABLE_KASUMI } from "./lib/constants_gen";
 import { API } from "./lib/api";
 import { onSseStateUpdate, stopSse } from "./lib/api/core/bridge";
 import TopBar from "./components/TopBar";
@@ -21,17 +22,27 @@ import Toast from "./components/Toast";
 
 const loadStatusTab = () => import("./routes/StatusTab");
 const loadConfigTab = () => import("./routes/ConfigTab");
-const loadKasumiTab = () => import("./routes/KasumiTab");
 const loadModulesTab = () => import("./routes/ModulesTab");
 const loadInfoTab = () => import("./routes/InfoTab");
+
+function createKasumiRoute() {
+  const loadKasumiTab = () => import("./routes/KasumiTab");
+  return { id: "kasumi", load: loadKasumiTab, component: lazy(loadKasumiTab) };
+}
 
 const routes = [
   { id: "status", load: loadStatusTab, component: lazy(loadStatusTab) },
   { id: "config", load: loadConfigTab, component: lazy(loadConfigTab) },
-  { id: "kasumi", load: loadKasumiTab, component: lazy(loadKasumiTab) },
+  ...(ENABLE_KASUMI ? [createKasumiRoute()] : []),
   { id: "modules", load: loadModulesTab, component: lazy(loadModulesTab) },
   { id: "info", load: loadInfoTab, component: lazy(loadInfoTab) },
 ];
+
+async function loadKasumiStore() {
+  if (!ENABLE_KASUMI) return null;
+  const module = await import("./lib/stores/kasumiStore");
+  return module.kasumiStore;
+}
 
 export default function App() {
   const [activeTab, setActiveTab] = createSignal("status");
@@ -52,7 +63,7 @@ export default function App() {
   let disposed = false;
 
   const visibleRoutes = createMemo(() =>
-    routes.filter((route) => route.id !== "kasumi" || kasumiStore.enabled),
+    routes.filter((route) => route.id !== "kasumi" || features.kasumiEnabled),
   );
   const visibleTabs = createMemo(() => visibleRoutes().map((r) => r.id));
   const tabCount = createMemo(() => Math.max(visibleTabs().length, 1));
@@ -198,7 +209,18 @@ export default function App() {
       setInitialDataReady(true);
       window.setTimeout(startRoutePreload, 0);
       onSseStateUpdate((state) => sysStore.handleSseUpdate(state));
-      onSseStateUpdate((state) => kasumiStore.handleSseUpdate(state));
+      if (ENABLE_KASUMI) {
+        const kasumiStore = await loadKasumiStore();
+        if (kasumiStore && !disposed) {
+          onSseStateUpdate((state) => {
+            kasumiStore.handleSseUpdate(state);
+            features.setKasumiStatus(
+              kasumiStore.enabled,
+              Boolean(kasumiStore.status?.available),
+            );
+          });
+        }
+      }
       void sysStore.ensureStatusLoaded();
       void configStore.loadConfig();
       void sysStore.ensureVersionLoaded();
@@ -221,7 +243,17 @@ export default function App() {
       const payload = await API.init();
       if (disposed) return;
       sysStore.loadFromInit(payload);
-      kasumiStore.loadFromInit(payload);
+      if (ENABLE_KASUMI) {
+        const kasumiStore = await loadKasumiStore();
+        if (disposed) return;
+        if (kasumiStore) {
+          kasumiStore.loadFromInit(payload);
+          features.setKasumiStatus(
+            kasumiStore.enabled,
+            Boolean(kasumiStore.status?.available),
+          );
+        }
+      }
       configStore.loadFromInit(payload);
     } catch (e) {
       if (disposed) return;

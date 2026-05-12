@@ -47,20 +47,24 @@ pub enum Commands {
         #[command(subcommand)]
         command: DaemonCommands,
     },
+    #[cfg(feature = "kasumi")]
     Lkm {
         #[command(subcommand)]
         command: LkmCommands,
     },
+    #[cfg(feature = "kasumi")]
     Hide {
         #[command(subcommand)]
         command: HideCommands,
     },
+    #[cfg(feature = "kasumi")]
     Kasumi {
         #[command(subcommand)]
         command: KasumiCommands,
     },
 }
 
+#[cfg(feature = "kasumi")]
 #[derive(Subcommand, Debug)]
 pub enum KasumiCommands {
     Status,
@@ -97,6 +101,7 @@ pub enum KasumiCommands {
     },
 }
 
+#[cfg(feature = "kasumi")]
 #[derive(Subcommand, Debug)]
 pub enum HideCommands {
     List,
@@ -139,8 +144,11 @@ pub enum ApiCommands {
     ModulesApply {
         modules: String,
     },
+    #[cfg(feature = "kasumi")]
     Lkm,
+    #[cfg(feature = "kasumi")]
     Features,
+    #[cfg(feature = "kasumi")]
     Hooks,
     #[command(name = "kernel-uname")]
     KernelUname,
@@ -149,10 +157,12 @@ pub enum ApiCommands {
         url: String,
     },
     Reboot,
+    #[cfg(feature = "kasumi")]
     #[command(name = "kasumi-maps-add")]
     KasumiMapsAdd {
         rule: String,
     },
+    #[cfg(feature = "kasumi")]
     #[command(name = "kasumi-maps-clear")]
     KasumiMapsClear,
 }
@@ -168,6 +178,7 @@ pub enum DaemonCommands {
     Status,
 }
 
+#[cfg(feature = "kasumi")]
 #[derive(Subcommand, Debug)]
 pub enum LkmCommands {
     Load,
@@ -175,6 +186,7 @@ pub enum LkmCommands {
     Status,
 }
 
+#[cfg(feature = "kasumi")]
 #[derive(Subcommand, Debug)]
 pub enum KasumiRuleCommands {
     Add {

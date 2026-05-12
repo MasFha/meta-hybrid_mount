@@ -1,4 +1,5 @@
 import { DEFAULT_CONFIG } from "../../constants";
+import { ENABLE_KASUMI } from "../../constants_gen";
 import type {
   AppConfig,
   KasumiConfig,
@@ -169,7 +170,7 @@ export function normalizeConfig(value: unknown): AppConfig {
     };
   }
 
-  return {
+  const normalized = {
     moduledir: isString(next.moduledir)
       ? next.moduledir
       : DEFAULT_CONFIG.moduledir,
@@ -186,7 +187,11 @@ export function normalizeConfig(value: unknown): AppConfig {
     default_mode: defaultMode,
     daemon_startup_mode:
       next.daemon_startup_mode === "persistent" ? "persistent" : "on-demand",
-    kasumi: normalizeKasumiConfig(next.kasumi),
     rules,
   };
+
+  return {
+    ...normalized,
+    ...(ENABLE_KASUMI ? { kasumi: normalizeKasumiConfig(next.kasumi) } : {}),
+  } as AppConfig;
 }

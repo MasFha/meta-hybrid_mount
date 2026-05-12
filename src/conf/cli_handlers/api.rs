@@ -14,6 +14,7 @@
 
 use anyhow::{Context, Result};
 
+#[cfg(feature = "kasumi")]
 use crate::core::api;
 
 fn print_json<T: serde::Serialize>(payload: &T, description: &str) -> Result<()> {
@@ -26,6 +27,17 @@ fn print_json<T: serde::Serialize>(payload: &T, description: &str) -> Result<()>
 }
 
 pub fn handle_api_features() -> Result<()> {
-    let payload = api::build_features_payload();
-    print_json(&payload, "features payload")
+    #[cfg(not(feature = "kasumi"))]
+    {
+        return print_json(
+            &serde_json::json!({ "bitmask": 0, "names": [] }),
+            "features payload",
+        );
+    }
+
+    #[cfg(feature = "kasumi")]
+    {
+        let payload = api::build_features_payload();
+        print_json(&payload, "features payload")
+    }
 }

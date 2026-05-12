@@ -21,6 +21,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 BUILD_MODE="debug"
+BUILD_FLAVOR="full"
 ARCH="arm64"
 ALL_ARCH=false
 SKIP_WEBUI=false
@@ -33,6 +34,7 @@ Usage: ./scripts/build-local.sh [options]
 
 Options:
   -r, --release               Build a release package
+      --lite                  Build the lite package (no Kasumi frontend/backend/LKM)
   -a, --arch <arm64>
                               Build a single Android ABI (default: arm64)
       --all-arch              Build all supported Android ABIs (currently arm64 only)
@@ -76,6 +78,10 @@ while [[ $# -gt 0 ]]; do
 	case "$1" in
 	-r | --release)
 		BUILD_MODE="release"
+		shift
+		;;
+	--lite)
+		BUILD_FLAVOR="lite"
 		shift
 		;;
 	-a | --arch)
@@ -148,6 +154,7 @@ cd "$REPO_ROOT"
 
 echo "== Hybrid Mount local build =="
 echo "Mode: $BUILD_MODE"
+echo "Flavor: $BUILD_FLAVOR"
 if [[ "$ALL_ARCH" == "true" ]]; then
 	echo "Arch: all"
 else
@@ -160,7 +167,11 @@ else
 	echo "WebUI: build"
 fi
 if [[ -n "${HYBRID_MOUNT_KASUMI_LKM_DIR:-}" ]]; then
-	echo "Kasumi LKM dir: ${HYBRID_MOUNT_KASUMI_LKM_DIR}"
+	if [[ "$BUILD_FLAVOR" == "lite" ]]; then
+		echo "Kasumi LKM dir: ignored for lite build"
+	else
+		echo "Kasumi LKM dir: ${HYBRID_MOUNT_KASUMI_LKM_DIR}"
+	fi
 fi
 echo
 
@@ -174,6 +185,7 @@ build_args=(run -p xtask -- build)
 if [[ "$BUILD_MODE" == "release" ]]; then
 	build_args+=(--release)
 fi
+build_args+=(--flavor "$BUILD_FLAVOR")
 if [[ "$SKIP_WEBUI" == "true" ]]; then
 	build_args+=(--skip-webui)
 fi

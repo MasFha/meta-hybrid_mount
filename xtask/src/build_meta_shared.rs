@@ -43,9 +43,12 @@ pub struct PackageMetadata {
 }
 
 #[derive(Deserialize)]
+#[allow(dead_code)]
 pub struct HybridMountMetadata {
     pub name: String,
     pub update: String,
+    pub lite_name: Option<String>,
+    pub lite_update: Option<String>,
 }
 
 pub struct ModulePropData<'a> {
@@ -98,11 +101,12 @@ pub fn render_module_prop(data: &ModulePropData<'_>) -> String {
 pub fn render_webui_constants(
     version: &str,
     is_release: bool,
+    enable_kasumi: bool,
     config_path: &str,
     state_path: &str,
     binary_path: &str,
 ) -> String {
     format!(
-        "export const APP_VERSION = \"{version}\";\nexport const IS_RELEASE = {is_release};\nexport const RUST_PATHS = {{\n  CONFIG: \"{config_path}\",\n  DAEMON_STATE: \"{state_path}\",\n  BINARY: \"{binary_path}\",\n}} as const;\n"
+        "export const APP_VERSION = \"{version}\";\nexport const IS_RELEASE = {is_release};\nexport const ENABLE_KASUMI = {enable_kasumi};\nexport const RUST_PATHS = {{\n  CONFIG: \"{config_path}\",\n  DAEMON_STATE: \"{state_path}\",\n  BINARY: \"{binary_path}\",\n}} as const;\n"
     )
 }

@@ -53,66 +53,96 @@ pub enum DaemonCommand {
     ApiModulesApply {
         modules: Vec<crate::core::api::ModuleApplyEntry>,
     },
+    #[cfg(feature = "kasumi")]
     ApiLkm,
+    #[cfg(feature = "kasumi")]
     ApiHooks,
     ApiKernelUname,
     ApiOpenUrl {
         url: String,
     },
     ApiReboot,
+    #[cfg(feature = "kasumi")]
     ApiKasumiMapsAdd {
         rule: serde_json::Value,
     },
+    #[cfg(feature = "kasumi")]
     ApiKasumiMapsClear,
+    #[cfg(feature = "kasumi")]
     KasumiStatus,
+    #[cfg(feature = "kasumi")]
     KasumiList,
+    #[cfg(feature = "kasumi")]
     KasumiVersion,
+    #[cfg(feature = "kasumi")]
     KasumiFeatures,
+    #[cfg(feature = "kasumi")]
     KasumiHooks,
+    #[cfg(feature = "kasumi")]
     KasumiApplyConfigRuntime,
+    #[cfg(feature = "kasumi")]
     HideList,
+    #[cfg(feature = "kasumi")]
     HideAdd {
         path: PathBuf,
     },
+    #[cfg(feature = "kasumi")]
     HideRemove {
         path: PathBuf,
     },
+    #[cfg(feature = "kasumi")]
     HideApply,
+    #[cfg(feature = "kasumi")]
     LkmStatus,
+    #[cfg(feature = "kasumi")]
     LkmLoad,
+    #[cfg(feature = "kasumi")]
     LkmUnload,
+    #[cfg(feature = "kasumi")]
     KasumiClear,
+    #[cfg(feature = "kasumi")]
     KasumiReleaseConnection,
+    #[cfg(feature = "kasumi")]
     KasumiInvalidateCache,
+    #[cfg(feature = "kasumi")]
     KasumiFixMounts,
+    #[cfg(feature = "kasumi")]
     KasumiRestoreUnameGlobal,
+    #[cfg(feature = "kasumi")]
     KasumiSetUname {
         mode: String,
         release: String,
         version: String,
     },
+    #[cfg(feature = "kasumi")]
     KasumiClearUname {
         mode: String,
     },
+    #[cfg(feature = "kasumi")]
     KasumiRuleAdd {
         target: PathBuf,
         source: PathBuf,
         file_type: Option<i32>,
     },
+    #[cfg(feature = "kasumi")]
     KasumiRuleMerge {
         target: PathBuf,
         source: PathBuf,
     },
+    #[cfg(feature = "kasumi")]
     KasumiRuleHide {
         path: PathBuf,
     },
+    #[cfg(feature = "kasumi")]
     KasumiRuleDelete {
         path: PathBuf,
     },
+    #[cfg(feature = "kasumi")]
     KasumiRuleAddDir {
         target_base: PathBuf,
         source_dir: PathBuf,
     },
+    #[cfg(feature = "kasumi")]
     KasumiRuleRemoveDir {
         target_base: PathBuf,
         source_dir: PathBuf,

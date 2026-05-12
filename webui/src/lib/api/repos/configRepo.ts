@@ -1,4 +1,5 @@
 import { PATHS } from "../../constants";
+import { ENABLE_KASUMI } from "../../constants_gen";
 import type { AppConfig } from "../../types";
 import { runDaemonCommand } from "../core/bridge";
 import { isRecord } from "../core/guards";
@@ -23,7 +24,7 @@ export async function loadConfigFromFile(): Promise<AppConfig> {
 
 export async function saveConfigToFile(config: AppConfig): Promise<void> {
   const normalized = normalizeConfig(config);
-  await patchConfigFile({
+  const patch = {
     moduledir: normalized.moduledir,
     mountsource: normalized.mountsource,
     overlay_mode: normalized.overlay_mode,
@@ -31,9 +32,10 @@ export async function saveConfigToFile(config: AppConfig): Promise<void> {
     enable_overlay_fallback: normalized.enable_overlay_fallback,
     default_mode: normalized.default_mode,
     daemon_startup_mode: normalized.daemon_startup_mode,
-    kasumi: normalized.kasumi,
     rules: normalized.rules,
-  });
+    ...(ENABLE_KASUMI ? { kasumi: normalized.kasumi } : {}),
+  };
+  await patchConfigFile(patch);
 }
 
 export async function patchConfigFile(

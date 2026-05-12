@@ -46,6 +46,7 @@ pub fn run_mount(cli: &Cli) -> Result<crate::conf::config::Config> {
         crate::scoped_log!(debug, "startup", "kernel: version={}", version.trim());
     }
 
+    #[cfg(feature = "kasumi")]
     if config.kasumi.enabled {
         match sys::lkm::autoload_if_needed(&config.kasumi) {
             Ok(true) => {
