@@ -14,7 +14,7 @@ use tgbot::{
     api::Client,
     types::{
         InputFile, InputMediaDocument, MediaGroup, MediaGroupItem, ParseMode, SendDocument,
-        SendMediaGroup,
+        SendMediaGroup, SendMessage,
     },
 };
 
@@ -74,17 +74,12 @@ async fn send_output_dir_notification_async(request: &NotifyRequest) -> Result<(
     let branch_name = env::var("GITHUB_REF_NAME").unwrap_or_else(|_| get_git_branch());
 
     let artifacts = find_zip_files(&request.output_dir)?;
-    let total_size = artifacts.iter().map(|artifact| artifact.size_bytes).sum();
 
     let (commit_msg, commit_hash) = get_git_commit();
     let safe_commit_msg = escape_html(&commit_msg);
     let commit_link = format!("{}/{}/commit/{}", server_url, repo, commit_hash);
 
-    println!(
-        "Selecting {} yield(s), total {:.2} MB",
-        artifacts.len(),
-        bytes_to_mib(total_size)
-    );
+    println!("Selecting {} yield(s)", artifacts.len());
 
     let bot = Client::new(bot_token)?;
     let context = NotificationContext {
@@ -93,7 +88,6 @@ async fn send_output_dir_notification_async(request: &NotifyRequest) -> Result<(
         request,
         branch_name: &branch_name,
         artifact_count: artifacts.len(),
-        total_size,
         safe_commit_msg: &safe_commit_msg,
         commit_link: &commit_link,
     };
@@ -116,7 +110,6 @@ struct NotificationContext<'a> {
     request: &'a NotifyRequest,
     branch_name: &'a str,
     artifact_count: usize,
-    total_size: u64,
     safe_commit_msg: &'a str,
     commit_link: &'a str,
 }
@@ -152,15 +145,10 @@ impl NotificationContext<'_> {
             .map(|artifact| artifact.file_name.as_str())
             .collect::<Vec<_>>()
             .join(", ");
-        let chunk_size = artifacts
-            .iter()
-            .map(|artifact| artifact.size_bytes)
-            .sum::<u64>();
 
         println!(
-            "Dispatching yield bundle to Granary (Telegram): {} ({:.2} MB)",
+            "Dispatching yield bundle to Granary (Telegram): {}",
             file_names,
-            bytes_to_mib(chunk_size)
         );
 
         let media = MediaGroup::new(self.build_media_group_items(artifacts, start_index).await?)?;
@@ -171,24 +159,34 @@ impl NotificationContext<'_> {
 
         self.bot.execute(action).await?;
 
+        // Send a separate text message with the caption after the media group
+        let text = build_primary_caption(
+            self.request,
+            self.branch_name,
+            self.artifact_count,
+            self.safe_commit_msg,
+            self.commit_link,
+        );
+        let mut msg = SendMessage::new(self.chat_id.to_owned(), text)
+            .with_parse_mode(ParseMode::Html);
+        if let Some(topic_id) = self.request.topic_id {
+            msg = msg.with_message_thread_id(topic_id);
+        }
+        self.bot.execute(msg).await?;
+
         Ok(())
     }
 
     async fn build_media_group_items(
         &self,
         artifacts: &[Artifact],
-        start_index: usize,
+        _start_index: usize,
     ) -> Result<Vec<MediaGroupItem>> {
         let mut items = Vec::with_capacity(artifacts.len());
 
-        for (offset, artifact) in artifacts.iter().enumerate() {
-            let index = start_index + offset;
-            let caption = self.caption_for_artifact(artifact, index);
+        for artifact in artifacts.iter() {
             let file = InputFile::path(artifact.path.clone()).await?;
-            let info = InputMediaDocument::default()
-                .with_caption_parse_mode(ParseMode::Html)
-                .with_disable_content_type_detection(true)
-                .with_caption(caption);
+            let info = InputMediaDocument::default().with_disable_content_type_detection(true);
             items.push(MediaGroupItem::for_document(file, info));
         }
 
@@ -201,7 +199,6 @@ impl NotificationContext<'_> {
                 self.request,
                 self.branch_name,
                 self.artifact_count,
-                self.total_size,
                 self.safe_commit_msg,
                 self.commit_link,
             )
@@ -266,7 +263,6 @@ fn build_primary_caption(
     request: &NotifyRequest,
     branch_name: &str,
     artifact_count: usize,
-    total_size: u64,
     safe_commit_msg: &str,
     commit_link: &str,
 ) -> String {
@@ -274,14 +270,12 @@ fn build_primary_caption(
         "🌾 <b>Hybrid-Mount: {}</b>\n\n\
         🌿 <b>分支 (Branch):</b> {}\n\n\
         📦 <b>产物 (Artifacts):</b> {}\n\n\
-        ⚖️ <b>总重 (Total Weight):</b> {:.2} MB\n\n\
         📝 <b>新性状 (Commit):</b>\n\
         <pre>{}</pre>\n\n\
         🚜 <a href='{}'>查看日志 (View Log)</a>",
         escape_html(&request.event_label),
         escape_html(branch_name),
         artifact_count,
-        bytes_to_mib(total_size),
         safe_commit_msg,
         commit_link
     )
