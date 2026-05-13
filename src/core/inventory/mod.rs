@@ -33,64 +33,18 @@ pub fn load_module_rules(config: &Config, module_id: &str) -> ModuleRules {
     }
 
     #[cfg(not(feature = "control-plane"))]
-    apply_nano_rules(config, &mut rules);
+    if let Some(marker_mode) = module_mount_mode_marker(&config.moduledir.join(module_id)) {
+        rules.default_mode = marker_mode;
+    }
 
     rules
 }
 
 #[cfg(not(feature = "control-plane"))]
-fn apply_nano_rules(config: &Config, rules: &mut ModuleRules) {
-    let overlay_whitelist = config
-        .overlay_whitelist
-        .iter()
-        .map(|path| normalize_rule_path(path))
-        .filter(|path| !path.is_empty())
-        .collect::<Vec<_>>();
-
-    let mut normalized_paths = std::collections::HashMap::new();
-    for (path, mode) in rules.paths.drain() {
-        let path = normalize_rule_path(std::path::Path::new(&path));
-        if path.is_empty() {
-            continue;
-        }
-        let mode = match mode {
-            MountMode::Ignore => MountMode::Ignore,
-            _ if overlay_whitelist
-                .iter()
-                .any(|prefix| path_matches_policy_prefix(&path, prefix)) =>
-            {
-                MountMode::Overlay
-            }
-            _ => MountMode::Magic,
-        };
-        normalized_paths.insert(path, mode);
-    }
-
-    for path in overlay_whitelist {
-        normalized_paths.insert(path, MountMode::Overlay);
-    }
-
-    rules.default_mode = MountMode::Magic;
-    rules.paths = normalized_paths;
-}
-
-#[cfg(not(feature = "control-plane"))]
-fn normalize_rule_path(path: &std::path::Path) -> String {
-    path.components()
-        .filter_map(|component| match component {
-            std::path::Component::Normal(value) => Some(value.to_string_lossy().into_owned()),
-            _ => None,
-        })
-        .collect::<Vec<_>>()
-        .join("/")
-}
-
-#[cfg(not(feature = "control-plane"))]
-fn path_matches_policy_prefix(path: &str, prefix: &str) -> bool {
-    path == prefix
-        || path
-            .strip_prefix(prefix)
-            .is_some_and(|rest| rest.starts_with('/'))
+pub fn module_mount_mode_marker(module_path: &std::path::Path) -> Option<MountMode> {
+    [MountMode::Overlay, MountMode::Magic]
+        .into_iter()
+        .find(|mode| module_path.join(mode.as_strategy()).is_file())
 }
 
 pub fn is_reserved_module_dir(id: &str) -> bool {
@@ -119,4 +73,79 @@ pub fn mount_block_markers(module_path: &std::path::Path) -> Vec<&'static str> {
 
 pub fn has_mount_block_marker(module_path: &std::path::Path) -> bool {
     !mount_block_markers(module_path).is_empty()
+}
+
+#[cfg(all(test, not(feature = "control-plane")))]
+mod tests {
+    use std::fs;
+
+    use tempfile::TempDir;
+
+    use super::*;
+    use crate::domain::DefaultMode;
+
+    #[test]
+    fn module_mount_mode_marker_detects_mode_files() {
+        let temp = TempDir::new().unwrap();
+        let module_path = temp.path().join("module");
+        fs::create_dir_all(&module_path).unwrap();
+
+        assert_eq!(module_mount_mode_marker(&module_path), None);
+
+        fs::write(module_path.join(MountMode::Magic.as_strategy()), b"").unwrap();
+        assert_eq!(
+            module_mount_mode_marker(&module_path),
+            Some(MountMode::Magic)
+        );
+    }
+
+    #[test]
+    fn module_mount_mode_marker_prefers_overlay_when_multiple_markers_exist() {
+        let temp = TempDir::new().unwrap();
+        let module_path = temp.path().join("module");
+        fs::create_dir_all(&module_path).unwrap();
+        fs::write(module_path.join(MountMode::Overlay.as_strategy()), b"").unwrap();
+        fs::write(module_path.join(MountMode::Magic.as_strategy()), b"").unwrap();
+
+        assert_eq!(
+            module_mount_mode_marker(&module_path),
+            Some(MountMode::Overlay)
+        );
+    }
+
+    #[test]
+    fn module_mount_mode_marker_ignores_kasumi_for_nano() {
+        let temp = TempDir::new().unwrap();
+        let module_path = temp.path().join("module");
+        fs::create_dir_all(&module_path).unwrap();
+        fs::write(module_path.join(MountMode::Kasumi.as_strategy()), b"").unwrap();
+
+        assert_eq!(module_mount_mode_marker(&module_path), None);
+    }
+
+    #[test]
+    fn load_module_rules_uses_mode_marker_for_nano_default() {
+        let temp = TempDir::new().unwrap();
+        let module_path = temp.path().join("module");
+        fs::create_dir_all(&module_path).unwrap();
+        fs::write(module_path.join(MountMode::Magic.as_strategy()), b"").unwrap();
+
+        let mut config = Config {
+            moduledir: temp.path().to_path_buf(),
+            default_mode: DefaultMode::Overlay,
+            ..Config::default()
+        };
+        config.rules.insert(
+            "module".to_string(),
+            ModuleRules {
+                default_mode: MountMode::Overlay,
+                ..Default::default()
+            },
+        );
+
+        assert_eq!(
+            load_module_rules(&config, "module").default_mode,
+            MountMode::Magic
+        );
+    }
 }

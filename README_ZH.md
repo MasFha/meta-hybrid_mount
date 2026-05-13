@@ -72,7 +72,7 @@ Lite 构建使用 `control-plane` 特性集（不含 `kasumi`）。WebUI 中的 
 - **无 WebUI** — 包中移除了 `webroot/`、`launcher.png` 和 `service.sh` 资源。
 - **纯挂载操作** — 二进制在启动时运行，按照配置完成所有挂载后终止。
 - **默认模式为 `magic`** — Nano 的预置配置中 `default_mode = "magic"`，优先使用 bind mount 而非 OverlayFS，以确保没有守护进程管理 ext4 镜像时的最大兼容性。
-- **OverlayFS 白名单** — 通过精选的路径白名单，允许特定路径在显式配置时仍走 OverlayFS。
+- **模块模式标记** — 安装时通过音量键选择后，会在每个受管理模块根目录写入空的 `overlay` 或 `magic` 标记文件，nano 运行时直接读取它们，而不再依赖白名单。
 - **零运行时开销** — 启动完成后，Hybrid Mount 不留下任何运行中的进程。
 
 选择 Nano，如果你想要可预测、无守护进程的挂载编排，且追求最小的资源占用。
@@ -81,7 +81,7 @@ Lite 构建使用 `control-plane` 特性集（不含 `kasumi`）。WebUI 中的 
 
 | 功能 | Full | Lite | Nano |
 |------|------|------|------|
-| OverlayFS 后端 | 是 | 是 | 仅白名单 |
+| OverlayFS 后端 | 是 | 是 | 标记驱动 |
 | Magic Mount 后端 | 是 | 是 | 是（默认） |
 | Kasumi 后端 | 是 | 否 | 否 |
 | WebUI | 是 | 是 | 否 |

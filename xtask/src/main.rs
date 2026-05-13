@@ -334,29 +334,25 @@ fn prune_flavor_assets(stage_dir: &Path, flavor: BuildFlavor) -> Result<()> {
 }
 
 fn configure_flavor_config(stage_dir: &Path, flavor: BuildFlavor) -> Result<()> {
-    if !matches!(flavor, BuildFlavor::Nano) {
-        return Ok(());
-    }
-
     let config_path = stage_dir.join("config.toml");
     let content = fs::read_to_string(&config_path)
         .with_context(|| format!("failed to read staged config {}", config_path.display()))?;
     let mut table = strip_toml_preamble(&content)
         .parse::<toml::Table>()
         .with_context(|| format!("failed to parse staged config {}", config_path.display()))?;
-    table.insert(
-        "default_mode".to_string(),
-        toml::Value::String("magic".to_string()),
-    );
-    table.insert(
-        "overlay_whitelist".to_string(),
-        toml::Value::Array(
-            build_meta_shared::defs::NANO_OVERLAY_WHITELIST
-                .iter()
-                .map(|path| toml::Value::String((*path).to_string()))
-                .collect(),
-        ),
-    );
+
+    if !flavor.enable_kasumi() {
+        table.remove("kasumi");
+    }
+
+    if matches!(flavor, BuildFlavor::Nano) {
+        table.insert(
+            "default_mode".to_string(),
+            toml::Value::String("magic".to_string()),
+        );
+        table.remove("daemon_startup_mode");
+    }
+
     fs::write(&config_path, toml::to_string_pretty(&table)?)
         .with_context(|| format!("failed to write staged config {}", config_path.display()))?;
     Ok(())
@@ -708,7 +704,36 @@ fn update_cargo_toml_version(version: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::strip_toml_preamble;
+    use std::{
+        fs,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    use super::{BuildFlavor, configure_flavor_config, strip_toml_preamble};
+
+    struct TestDir(std::path::PathBuf);
+
+    impl TestDir {
+        fn new(name: &str) -> Self {
+            let nanos = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos();
+            let path = std::env::temp_dir().join(format!("{name}-{nanos}"));
+            fs::create_dir_all(&path).unwrap();
+            Self(path)
+        }
+
+        fn path(&self) -> &std::path::Path {
+            &self.0
+        }
+    }
+
+    impl Drop for TestDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
 
     #[test]
     fn strips_leading_comment_block_before_toml() {
@@ -726,5 +751,68 @@ key = "value"
         let input = "key = \"value\"\n";
 
         assert_eq!(strip_toml_preamble(input), input);
+    }
+
+    #[test]
+    fn lite_config_removes_kasumi_but_keeps_daemon_settings() {
+        let temp = TestDir::new("xtask-lite-config");
+        fs::write(
+            temp.path().join("config.toml"),
+            r#"
+default_mode = "overlay"
+daemon_startup_mode = "persistent"
+
+[kasumi]
+enabled = false
+"#,
+        )
+        .unwrap();
+
+        configure_flavor_config(temp.path(), BuildFlavor::Lite).unwrap();
+        let table = fs::read_to_string(temp.path().join("config.toml"))
+            .unwrap()
+            .parse::<toml::Table>()
+            .unwrap();
+
+        assert!(!table.contains_key("kasumi"));
+        assert_eq!(
+            table.get("default_mode").and_then(toml::Value::as_str),
+            Some("overlay")
+        );
+        assert_eq!(
+            table
+                .get("daemon_startup_mode")
+                .and_then(toml::Value::as_str),
+            Some("persistent")
+        );
+    }
+
+    #[test]
+    fn nano_config_removes_control_plane_and_kasumi_settings() {
+        let temp = TestDir::new("xtask-nano-config");
+        fs::write(
+            temp.path().join("config.toml"),
+            r#"
+default_mode = "overlay"
+daemon_startup_mode = "persistent"
+
+[kasumi]
+enabled = false
+"#,
+        )
+        .unwrap();
+
+        configure_flavor_config(temp.path(), BuildFlavor::Nano).unwrap();
+        let table = fs::read_to_string(temp.path().join("config.toml"))
+            .unwrap()
+            .parse::<toml::Table>()
+            .unwrap();
+
+        assert!(!table.contains_key("kasumi"));
+        assert!(!table.contains_key("daemon_startup_mode"));
+        assert_eq!(
+            table.get("default_mode").and_then(toml::Value::as_str),
+            Some("magic")
+        );
     }
 }

@@ -221,9 +221,6 @@ pub struct Config {
     pub enable_overlay_fallback: bool,
     #[serde(default)]
     pub default_mode: DefaultMode,
-    #[cfg(not(feature = "control-plane"))]
-    #[serde(default = "default_nano_overlay_whitelist")]
-    pub overlay_whitelist: Vec<PathBuf>,
     #[serde(default)]
     pub kasumi: KasumiConfig,
     #[serde(default)]
@@ -248,14 +245,6 @@ fn default_kasumi_lkm_dir() -> PathBuf {
     PathBuf::from(defs::KASUMI_LKM_DIR)
 }
 
-#[cfg(not(feature = "control-plane"))]
-fn default_nano_overlay_whitelist() -> Vec<PathBuf> {
-    defs::NANO_OVERLAY_WHITELIST
-        .iter()
-        .map(PathBuf::from)
-        .collect()
-}
-
 fn default_true() -> bool {
     true
 }
@@ -269,8 +258,6 @@ impl Default for Config {
             disable_umount: false,
             enable_overlay_fallback: false,
             default_mode: DefaultMode::default(),
-            #[cfg(not(feature = "control-plane"))]
-            overlay_whitelist: default_nano_overlay_whitelist(),
             kasumi: KasumiConfig::default(),
             rules: HashMap::new(),
             daemon_startup_mode: DaemonStartupMode::default(),

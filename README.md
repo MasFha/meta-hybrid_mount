@@ -72,7 +72,7 @@ The `nano` flavor is a **config-only** build. It strips the WebUI, daemon, CLI, 
 - **No WebUI** — the `webroot/`, `launcher.png`, and `service.sh` assets are removed from the package.
 - **Mount-only operation** — the binary runs during boot, mounts everything according to the config, and terminates.
 - **Default mode is `magic`** — Nano ships with `default_mode = "magic"` pre-set in its config, preferring bind mounts over OverlayFS for maximum compatibility without a daemon to manage ext4 images.
-- **OverlayFS whitelist** — a curated allowlist of paths that may still use OverlayFS when explicitly configured.
+- **Module mode markers** — install-time volume-key selection writes an empty `overlay` or `magic` marker in each managed module root, and nano reads that instead of a whitelist.
 - **Zero runtime overhead** — after boot completes, Hybrid Mount leaves no running processes.
 
 Choose Nano if you want predictable, daemon-free mount orchestration with the smallest possible footprint.
@@ -81,7 +81,7 @@ Choose Nano if you want predictable, daemon-free mount orchestration with the sm
 
 | Feature | Full | Lite | Nano |
 |---------|------|------|------|
-| OverlayFS backend | Yes | Yes | Whitelist only |
+| OverlayFS backend | Yes | Yes | Marker-based |
 | Magic Mount backend | Yes | Yes | Yes (default) |
 | Kasumi backend | Yes | No | No |
 | WebUI | Yes | Yes | No |

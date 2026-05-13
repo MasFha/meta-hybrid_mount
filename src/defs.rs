@@ -53,10 +53,6 @@ pub const IGNORE_UNMOUNT_PARTITIONS: &[&str] = &[
     "/system/lib64",
 ];
 
-#[allow(dead_code)]
-pub const NANO_OVERLAY_WHITELIST: &[&str] =
-    &["vendor/lib", "vendor/lib64", "system/lib", "system/lib64"];
-
 pub const MANAGED_PARTITIONS: &[&str] = &[
     "odm",
     "product",
