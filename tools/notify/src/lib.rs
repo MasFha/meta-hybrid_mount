@@ -14,7 +14,7 @@ use tgbot::{
     api::Client,
     types::{
         InputFile, InputMediaDocument, MediaGroup, MediaGroupItem, ParseMode, SendDocument,
-        SendMediaGroup, SendMessage,
+        SendMediaGroup,
     },
 };
 
@@ -139,7 +139,7 @@ impl NotificationContext<'_> {
         Ok(())
     }
 
-    async fn send_artifact_group(&self, artifacts: &[Artifact], start_index: usize) -> Result<()> {
+    async fn send_artifact_group(&self, artifacts: &[Artifact], _start_index: usize) -> Result<()> {
         let file_names = artifacts
             .iter()
             .map(|artifact| artifact.file_name.as_str())
@@ -151,7 +151,14 @@ impl NotificationContext<'_> {
             file_names,
         );
 
-        let media = MediaGroup::new(self.build_media_group_items(artifacts, start_index).await?)?;
+        let caption = build_primary_caption(
+            self.request,
+            self.branch_name,
+            self.artifact_count,
+            self.safe_commit_msg,
+            self.commit_link,
+        );
+        let media = MediaGroup::new(self.build_media_group_items(artifacts, &caption).await?)?;
         let mut action = SendMediaGroup::new(self.chat_id.to_owned(), media);
         if let Some(topic_id) = self.request.topic_id {
             action = action.with_message_thread_id(topic_id);
@@ -159,34 +166,24 @@ impl NotificationContext<'_> {
 
         self.bot.execute(action).await?;
 
-        // Send a separate text message with the caption after the media group
-        let text = build_primary_caption(
-            self.request,
-            self.branch_name,
-            self.artifact_count,
-            self.safe_commit_msg,
-            self.commit_link,
-        );
-        let mut msg =
-            SendMessage::new(self.chat_id.to_owned(), text).with_parse_mode(ParseMode::Html);
-        if let Some(topic_id) = self.request.topic_id {
-            msg = msg.with_message_thread_id(topic_id);
-        }
-        self.bot.execute(msg).await?;
-
         Ok(())
     }
 
     async fn build_media_group_items(
         &self,
         artifacts: &[Artifact],
-        _start_index: usize,
+        caption: &str,
     ) -> Result<Vec<MediaGroupItem>> {
         let mut items = Vec::with_capacity(artifacts.len());
 
-        for artifact in artifacts.iter() {
+        for (i, artifact) in artifacts.iter().enumerate() {
             let file = InputFile::path(artifact.path.clone()).await?;
-            let info = InputMediaDocument::default().with_disable_content_type_detection(true);
+            let mut info = InputMediaDocument::default().with_disable_content_type_detection(true);
+            if i == 0 {
+                info = info
+                    .with_caption_parse_mode(ParseMode::Html)
+                    .with_caption(caption.to_owned());
+            }
             items.push(MediaGroupItem::for_document(file, info));
         }
 
