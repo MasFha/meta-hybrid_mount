@@ -44,15 +44,15 @@ Releases are published in three flavors — see [Build Flavors](#build-flavors) 
 
 Hybrid Mount is released in three flavors, each targeting a different use case:
 
-| Flavor | Binary | WebUI | Daemon / CLI | Kasumi LKM | Best for |
+| Flavor | Binary | WebUI | Daemon / CLI | Kasumi LKM | Use case |
 |--------|--------|-------|-------------|------------|----------|
-| **Full** | Yes | Yes | Yes | Yes | Users who want the complete feature set with Kasumi hide/spoof capabilities. |
+| **Full** | Yes | Yes | Yes | Yes | Users who need Kasumi-backed routing or hide/spoof capabilities. |
 | **Lite** | Yes | Yes | Yes | No | Users who want the WebUI and full policy engine but don't need LKM-backed stealth features. |
 | **Nano** | Yes | No | No | No | Minimalists who just want mount orchestration via config file — no runtime daemon, no WebUI, no CLI. |
 
 ### Full
 
-The `full` flavor includes everything: all three mount backends (OverlayFS, Magic Mount, Kasumi), the SolidJS WebUI, the Unix-socket daemon with HTTP/SSE, the full CLI, and the Kasumi LKM assets. This is the recommended build for most users.
+The `full` flavor includes all supported mount backends (OverlayFS, Magic Mount, Kasumi), the SolidJS WebUI, the Unix-socket daemon with HTTP/SSE, the CLI, and the Kasumi LKM assets. Use Full when Kasumi-backed routing or auxiliary hide/spoof features are required.
 
 ### Lite
 
@@ -60,7 +60,7 @@ The `lite` flavor strips the Kasumi LKM and all Kasumi-related features (hide, s
 
 - Your kernel doesn't support loading external LKMs.
 - You don't need runtime hide/spoof capabilities.
-- You want a smaller download with the full graphical management experience.
+- You want a smaller download while keeping the WebUI and daemon management interface.
 
 Lite builds use the feature set `control-plane` (no `kasumi`). The WebUI's Kasumi panel is hidden automatically.
 
@@ -71,11 +71,11 @@ The `nano` flavor is a **config-only** build. It strips the WebUI, daemon, CLI, 
 - **No runtime daemon** — no background process, no socket, no WebUI, no CLI subcommands.
 - **No WebUI** — the `webroot/`, `launcher.png`, and `service.sh` assets are removed from the package.
 - **Mount-only operation** — the binary runs during boot, mounts everything according to the config, and terminates.
-- **Default mode is `magic`** — Nano ships with `default_mode = "magic"` pre-set in its config, preferring bind mounts over OverlayFS for maximum compatibility without a daemon to manage ext4 images.
-- **Module mode markers** — install-time volume-key selection writes an empty `overlay` or `magic` marker in each managed module root, and nano reads that instead of a whitelist.
-- **Zero runtime overhead** — after boot completes, Hybrid Mount leaves no running processes.
+- **Default mode is `magic`** — Nano ships with `default_mode = "magic"` pre-set in its config, preferring bind mounts when no daemon is available to manage ext4 images.
+- **Module mode markers** — install-time volume-key selection writes an empty `overlay` or `magic` marker in each managed module root, and Nano reads that instead of a whitelist. Marker filenames are matched case-insensitively.
+- **No resident Hybrid Mount process** — after boot-time mounting completes, the Nano binary exits.
 
-Choose Nano if you want predictable, daemon-free mount orchestration with the smallest possible footprint.
+Choose Nano if you want predictable, daemon-free mount orchestration with a smaller runtime surface.
 
 ### Feature matrix
 
@@ -316,6 +316,21 @@ When multiple policies could apply to a path, evaluation order is:
 | `kasumi` | No | any | Skip Kasumi mapping. |
 | `ignore` | n/a | any | Do not mount. |
 
+### Module marker files
+
+Hybrid Mount also recognizes marker files in module directories. These markers are expected to be regular files; only the filename is used. Marker filenames are matched case-insensitively for ASCII letters, so `DISABLE`, `Disable`, and `disable` are treated as the same marker.
+
+| Marker | Location | Effect |
+| --- | --- | --- |
+| `disable` | Module root | Excludes the module from mount planning and reports it as disabled. |
+| `remove` | Module root | Excludes the module from mount planning; normally created by the root manager during removal. |
+| `skip_mount` | Module root | Excludes the module from mount processing and records it in the runtime skip list. |
+| `mount_error` | Module root | Marks a module that was skipped after a mount failure. Recovery and daemon commands may create or clear it. |
+| `overlay` / `magic` | Module root, Nano builds | Selects the module default mount backend for Nano builds. Full and Lite builds use config rules instead. |
+| `.replace` | Inside a module directory | Applies replacement semantics to the containing directory. The marker itself is not copied as normal module content; prepared overlay layers preserve the directory and set overlay opaque metadata where supported. |
+
+If multiple case variants of the same marker exist in one directory, cleanup operations remove all matching variants.
+
 ### Practical recipes
 
 - **One problematic binary on bind mount, rest on overlay**: set module default to `overlay`, override the binary path to `magic`.
@@ -490,7 +505,7 @@ cd webui && pnpm test
 
 ### Release profile
 
-The release profile uses `opt-level = 3`, `lto = "fat"`, `codegen-units = 1`, `strip = true`, and `panic = "abort"` for minimal binary size.
+The release profile uses `opt-level = 3`, `lto = "fat"`, `codegen-units = 1`, `strip = true`, and `panic = "abort"` to reduce binary size.
 
 ---
 
