@@ -29,6 +29,7 @@ Releases are published in three flavors — see [Build Flavors](#build-flavors) 
 - [Quick Start](#quick-start)
 - [Mount Modes](#mount-modes)
 - [WebUI](#webui)
+- [Language Support](#language-support)
 - [Configuration](#configuration)
 - [Kasumi](#kasumi)
 - [Policy Reference](#policy-reference)
@@ -176,6 +177,22 @@ The WebUI is designed to be opened directly from your **root manager app** (Kern
 - **Module management** — list all detected modules with their effective mount modes; apply mode changes interactively.
 - **Configuration editor** — full config.toml editing with validation, including per-module path rules.
 - **Kasumi control panel** — LKM status, rule listing, feature toggles, uname configuration, maps/kstat rules (Full flavor only).
+
+### Language Support
+
+The WebUI currently ships with these locales:
+
+- English (`en-US`, default)
+- Español (`es-ES`)
+- Italiano (`it-IT`)
+- 日本語 (`ja-JP`)
+- Русский (`ru-RU`)
+- Українська (`uk-UA`)
+- Tiếng Việt (`vi-VN`)
+- 简体中文 (`zh-CN`)
+- 繁體中文 (`zh-TW`)
+
+Project documentation is available in English, Simplified Chinese, and Japanese.
 
 ### Access
 

@@ -18,6 +18,7 @@ It provides a stable UI contract for configuration, module policy editing, runti
 
 - [Design Goals](#design-goals)
 - [Architecture](#architecture)
+- [Internationalization](#internationalization)
 - [Repository Layout](#repository-layout)
 - [API Contract](#api-contract)
 - [Build and Development](#build-and-development)
@@ -49,6 +50,22 @@ Core frontend layers:
 - `src/lib/api.ts`: unified backend bridge (`AppAPI`, `RealAPI`, `MockAPI`).
 - `src/lib/types.ts`: shared data contracts for config, module, and status payloads.
 - `src/lib/stores/*`: state containers for config/system/module/UI domains.
+
+## Internationalization
+
+The UI currently ships with these locales:
+
+- English (`en-US`, default)
+- Español (`es-ES`)
+- Italiano (`it-IT`)
+- 日本語 (`ja-JP`)
+- Русский (`ru-RU`)
+- Українська (`uk-UA`)
+- Tiếng Việt (`vi-VN`)
+- 简体中文 (`zh-CN`)
+- 繁體中文 (`zh-TW`)
+
+Project documentation is available in English and Simplified Chinese.
 
 ## Repository Layout
 
