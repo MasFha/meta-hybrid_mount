@@ -18,7 +18,7 @@ Hybrid Mount は、**KernelSU** と **APatch** 向けのマウント統合メタ
 
 リリースは3つのフレーバーで公開されています — 詳細は [ビルドフレーバー](#ビルドフレーバー) を参照してください。特に明記しない限り、以降の説明は `full` ビルドについてのものです。
 
-**[English](README.md)** &nbsp; **[简体中文](README_ZH.md)** &nbsp; **[日本語](README_JP.md)**
+**[English](README.md)** &nbsp; **[简体中文](README_ZH.md)** &nbsp; **[繁體中文](README_ZH_TW.md)** &nbsp; **[日本語](README_JP.md)** &nbsp; **[Español](README_ES.md)** &nbsp; **[Italiano](README_IT.md)** &nbsp; **[Русский](README_RU.md)** &nbsp; **[Українська](README_UK.md)** &nbsp; **[Tiếng Việt](README_VI.md)**
 
 ---
 
@@ -192,7 +192,7 @@ WebUI は次のロケールを提供しています：
 - 简体中文 (`zh-CN`)
 - 繁體中文 (`zh-TW`)
 
-README 文書は [English](README.md)、[简体中文](README_ZH.md)、[日本語](README_JP.md) で提供されています。
+README 文書は [English](README.md)、[简体中文](README_ZH.md)、[繁體中文](README_ZH_TW.md)、[日本語](README_JP.md)、[Español](README_ES.md)、[Italiano](README_IT.md)、[Русский](README_RU.md)、[Українська](README_UK.md)、[Tiếng Việt](README_VI.md) で提供されています。
 
 ### アクセス方法
 

@@ -18,7 +18,7 @@ A built-in **SolidJS WebUI** provides graphical management, live state monitorin
 
 Releases are published in three flavors — see [Build Flavors](#build-flavors) for a detailed comparison. Unless noted otherwise, the rest of this README describes the `full` build.
 
-**[English](README.md)** &nbsp; **[简体中文](README_ZH.md)** &nbsp; **[日本語](README_JP.md)**
+**[English](README.md)** &nbsp; **[简体中文](README_ZH.md)** &nbsp; **[繁體中文](README_ZH_TW.md)** &nbsp; **[日本語](README_JP.md)** &nbsp; **[Español](README_ES.md)** &nbsp; **[Italiano](README_IT.md)** &nbsp; **[Русский](README_RU.md)** &nbsp; **[Українська](README_UK.md)** &nbsp; **[Tiếng Việt](README_VI.md)**
 
 ---
 
@@ -192,7 +192,7 @@ The WebUI currently ships with these locales:
 - 简体中文 (`zh-CN`)
 - 繁體中文 (`zh-TW`)
 
-README documentation is available in [English](README.md), [Simplified Chinese](README_ZH.md), and [Japanese](README_JP.md).
+README documentation is available in [English](README.md), [Simplified Chinese](README_ZH.md), [Traditional Chinese](README_ZH_TW.md), [Japanese](README_JP.md), [Spanish](README_ES.md), [Italian](README_IT.md), [Russian](README_RU.md), [Ukrainian](README_UK.md), and [Vietnamese](README_VI.md).
 
 ### Access
 
