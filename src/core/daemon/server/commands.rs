@@ -236,7 +236,30 @@ pub(super) fn dispatch_command(ctx: &CommandContext<'_>, command: DaemonCommand)
         DaemonCommand::WebuiStart => Ok(webui.session_payload()),
         DaemonCommand::Init => {
             let (status_value, snapshot) = cached_status_and_snapshot(state)?;
-            let config_value = to_value(config)?;
+            let mut config_value = to_value(config)?;
+            // When Kasumi is not usable (feature not compiled, kernel too
+            // old, LKM not present, or protocol mismatch), force
+            // kasumi.enabled = false in the reported config so the WebUI
+            // never shows a non-existent Kasumi mode — even when switching
+            // from a full to lite build without rebuilding the WebUI.
+            #[cfg(feature = "kasumi")]
+            {
+                if !config.kasumi.enabled || !kasumi::can_operate() {
+                    if let Some(kasumi_val) = config_value.get_mut("kasumi") {
+                        if let Some(enabled) = kasumi_val.get_mut("enabled") {
+                            *enabled = json!(false);
+                        }
+                    }
+                }
+            }
+            #[cfg(not(feature = "kasumi"))]
+            {
+                if let Some(kasumi_val) = config_value.get_mut("kasumi") {
+                    if let Some(enabled) = kasumi_val.get_mut("enabled") {
+                        *enabled = json!(false);
+                    }
+                }
+            }
             let version_value = to_value(&api::build_version_payload())?;
             let system_info_value = to_value(&api::build_system_info_payload(&snapshot))?;
             #[cfg(feature = "kasumi")]
