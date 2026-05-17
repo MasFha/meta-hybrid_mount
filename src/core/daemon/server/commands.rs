@@ -244,21 +244,20 @@ pub(super) fn dispatch_command(ctx: &CommandContext<'_>, command: DaemonCommand)
             // from a full to lite build without rebuilding the WebUI.
             #[cfg(feature = "kasumi")]
             {
-                if !config.kasumi.enabled || !kasumi::can_operate() {
-                    if let Some(kasumi_val) = config_value.get_mut("kasumi") {
-                        if let Some(enabled) = kasumi_val.get_mut("enabled") {
-                            *enabled = json!(false);
-                        }
-                    }
+                if (!config.kasumi.enabled || !kasumi::can_operate())
+                    && let Some(kasumi_val) = config_value.get_mut("kasumi")
+                    && let Some(enabled) = kasumi_val.get_mut("enabled")
+                {
+                    *enabled = json!(false);
                 }
             }
             #[cfg(not(feature = "kasumi"))]
             {
-                if let Some(kasumi_val) = config_value.get_mut("kasumi") {
-                    if let Some(enabled) = kasumi_val.get_mut("enabled") {
-                        *enabled = json!(false);
-                    }
-                }
+                if let Some(kasumi_val) = config_value.get_mut("kasumi")
+                && let Some(enabled) = kasumi_val.get_mut("enabled")
+            {
+                *enabled = json!(false);
+            }
             }
             let version_value = to_value(&api::build_version_payload())?;
             let system_info_value = to_value(&api::build_system_info_payload(&snapshot))?;
