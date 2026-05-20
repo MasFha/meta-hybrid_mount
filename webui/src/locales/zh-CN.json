@@ -83,7 +83,7 @@
       "overlay": "OverlayFS",
       "magic": "Magic Mount",
       "kasumi": "Kasumi",
-      "umount": "Umount",
+      "unmounted": "未挂载",
       "short": {
         "overlay": "Overlay",
         "magic": "Magic",
@@ -92,7 +92,7 @@
       }
     },
     "emptyState": "未找到模块。",
-    "umountHiddenHint": "Umount 模块已隐藏。",
+    "unmountedHiddenHint": "未挂载的模块已隐藏。",
     "defaultTag": "默认",
     "compatTag": "兼容",
     "disableTag": "禁用",

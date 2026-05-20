@@ -82,7 +82,7 @@
       "overlay": "OverlayFS",
       "magic": "Magic Mount",
       "kasumi": "Kasumi",
-      "umount": "Umount",
+      "unmounted": "Unmounted",
       "short": {
         "overlay": "Overlay",
         "magic": "Magic",
@@ -91,7 +91,7 @@
       }
     },
     "emptyState": "モジュールが見つかりません。",
-    "umountHiddenHint": "Umount モジュールは非表示です。",
+    "unmountedHiddenHint": "Unmounted モジュールは非表示です。",
     "defaultTag": "デフォルト",
     "compatTag": "互換",
     "disableTag": "無効",

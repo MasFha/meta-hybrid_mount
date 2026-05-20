@@ -27,7 +27,7 @@ export default function ModulesTab() {
   const [searchQuery, setSearchQuery] = createSignal("");
   const deferredSearchQuery = createDeferred(searchQuery);
   const [filterType, setFilterType] = createSignal<"all" | MountMode>("all");
-  const [showUmount, setShowUmount] = createSignal(false);
+  const [showUnmounted, setShowUnmounted] = createSignal(false);
   const [expandedId, setExpandedId] = createSignal<string | null>(null);
   const [visibleCount, setVisibleCount] = createSignal(BATCH_SIZE);
   let observerTarget: HTMLDivElement | undefined;
@@ -50,7 +50,7 @@ export default function ModulesTab() {
   createEffect(() => {
     searchQuery();
     filterType();
-    showUmount();
+    showUnmounted();
     setVisibleCount(BATCH_SIZE);
   });
 
@@ -93,11 +93,11 @@ export default function ModulesTab() {
   const filteredModules = createMemo(() => {
     const q = deferredSearchQuery().trim().toLowerCase();
     const currentFilter = filterType();
-    const includeUmount = showUmount();
+    const includeUnmounted = showUnmounted();
 
     return moduleStore.modules.filter((module) => {
       const hasMountError = Boolean(module.mount_error);
-      if (!module.is_mounted && !includeUmount && !hasMountError) {
+      if (!module.is_mounted && !includeUnmounted && !hasMountError) {
         return false;
       }
       if (
@@ -158,7 +158,7 @@ export default function ModulesTab() {
 
   function getModeLabel(mod: Module) {
     const modes = uiStore.L.modules?.modes;
-    if (!mod.is_mounted) return modes?.umount ?? "Umount";
+    if (!mod.is_mounted) return modes?.unmounted ?? "Unmounted";
     const mode = mod.mode;
     if (mode === "magic") return modes?.magic ?? "Magic";
     if (mode === "kasumi") {
@@ -214,15 +214,15 @@ export default function ModulesTab() {
 
             <div class="filter-group">
               <button
-                class={`btn-icon ${showUmount() ? "active" : ""}`}
-                onClick={() => setShowUmount(!showUmount())}
-                title={showUmount() ? "Hide Umount" : "Show Umount"}
+                class={`btn-icon ${showUnmounted() ? "active" : ""}`}
+                onClick={() => setShowUnmounted(!showUnmounted())}
+                title={showUnmounted() ? "Hide Unmounted" : "Show Unmounted"}
                 type="button"
-                aria-pressed={showUmount()}
+                aria-pressed={showUnmounted()}
               >
                 <svg viewBox="0 0 24 24" width="20" height="20">
                   <path
-                    d={showUmount() ? ICONS.visibility : ICONS.visibility_off}
+                    d={showUnmounted() ? ICONS.visibility : ICONS.visibility_off}
                     fill="currentColor"
                   />
                 </svg>
@@ -277,10 +277,10 @@ export default function ModulesTab() {
                   <div>
                     {uiStore.L.modules?.emptyState ?? "No modules found."}
                   </div>
-                  <Show when={!showUmount()}>
+                  <Show when={!showUnmounted()}>
                     <div class="empty-state-hint">
-                      {uiStore.L.modules?.umountHiddenHint ??
-                        "Umount modules are hidden."}
+                      {uiStore.L.modules?.unmountedHiddenHint ??
+                        "Unmounted modules are hidden."}
                     </div>
                   </Show>
                 </div>

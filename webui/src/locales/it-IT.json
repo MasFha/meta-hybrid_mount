@@ -82,7 +82,7 @@
       "overlay": "OverlayFS",
       "magic": "Magic Mount",
       "kasumi": "Kasumi",
-      "umount": "Umount",
+      "unmounted": "Unmounted",
       "short": {
         "overlay": "Overlay",
         "magic": "Magic",
@@ -91,7 +91,7 @@
       }
     },
     "emptyState": "Nessun modulo trovato.",
-    "umountHiddenHint": "I moduli Umount sono nascosti.",
+    "unmountedHiddenHint": "I moduli Unmounted sono nascosti.",
     "defaultTag": "Predef.",
     "compatTag": "Compat.",
     "disableTag": "Disabilitato",
