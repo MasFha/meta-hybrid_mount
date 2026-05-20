@@ -1,10 +1,6 @@
-#[cfg(feature = "kasumi")]
-use std::{env, path::PathBuf};
-use std::{fs, io::Write};
+use std::{env, fs, path::PathBuf};
 
-use anyhow::Result;
-#[cfg(feature = "kasumi")]
-use anyhow::{Context, anyhow};
+use anyhow::{Context, Result, anyhow};
 
 #[path = "xtask/src/build_meta_shared.rs"]
 mod build_meta_shared;
@@ -17,7 +13,7 @@ fn load_cargo_config() -> Result<build_meta_shared::CargoConfig> {
 fn main() -> Result<()> {
     println!("cargo:rerun-if-changed=Cargo.lock");
     println!("cargo:rerun-if-changed=Cargo.toml");
-    println!("cargo:rerun-if-changed=.git");
+    println!("cargo:rerun-if-changed=.git/HEAD");
     println!("cargo:rerun-if-changed=xtask/src/build_meta_shared.rs");
     println!("cargo:rerun-if-changed=src/defs.rs");
 
@@ -104,12 +100,9 @@ fn gen_module_prop(data: &build_meta_shared::CargoConfig) -> Result<()> {
         webui_icon: true,
     });
 
-    let mut file = fs::OpenOptions::new()
-        .create(true)
-        .truncate(true)
-        .write(true)
-        .open("module/module.prop")?;
-
-    file.write_all(content.as_bytes())?;
+    let out_dir = PathBuf::from(
+        env::var_os("OUT_DIR").ok_or_else(|| anyhow::anyhow!("OUT_DIR is not set for build script"))?,
+    );
+    fs::write(out_dir.join("module.prop"), content.as_bytes())?;
     Ok(())
 }
