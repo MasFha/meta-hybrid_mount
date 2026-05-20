@@ -20,7 +20,8 @@ export default function RuntimeSection(props: RuntimeSectionProps) {
           disabled={props.pending}
           onClick={() =>
             props.runAction(
-              () => API.setKasumiStealth(!Boolean(props.config?.enable_stealth)),
+              () =>
+                API.setKasumiStealth(!Boolean(props.config?.enable_stealth)),
               uiStore.L.kasumi?.stealthUpdated ?? "Stealth updated",
             )
           }
@@ -44,7 +45,9 @@ export default function RuntimeSection(props: RuntimeSectionProps) {
           onClick={() =>
             props.runAction(
               () =>
-                API.setKasumiHidexattr(!Boolean(props.config?.enable_hidexattr)),
+                API.setKasumiHidexattr(
+                  !Boolean(props.config?.enable_hidexattr),
+                ),
               uiStore.L.kasumi?.hidexattrUpdated ?? "HideXattr updated",
             )
           }

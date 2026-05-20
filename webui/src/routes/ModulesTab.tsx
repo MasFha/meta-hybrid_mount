@@ -18,6 +18,7 @@ import Skeleton from "../components/Skeleton";
 import BottomActions from "../components/BottomActions";
 import type { Module, MountMode } from "../lib/types";
 import "./ModulesTab.css";
+import { getErrorMessage } from "../lib/api/core/error";
 import "@material/web/iconbutton/filled-tonal-icon-button.js";
 import "@material/web/button/filled-tonal-button.js";
 import "@material/web/icon/icon.js";
@@ -128,11 +129,13 @@ export default function ModulesTab() {
         "success",
       );
       await moduleStore.loadModules(true);
-    } catch (e: any) {
+    } catch (e: unknown) {
       uiStore.showToast(
-        e?.message ||
-          uiStore.L.modules?.mountErrorsClearFailed ||
-          "Failed to clear mount errors",
+        getErrorMessage(
+          e,
+          uiStore.L.modules?.mountErrorsClearFailed ??
+            "Failed to clear mount errors",
+        ),
         "error",
       );
     } finally {
@@ -222,7 +225,9 @@ export default function ModulesTab() {
               >
                 <svg viewBox="0 0 24 24" width="20" height="20">
                   <path
-                    d={showUnmounted() ? ICONS.visibility : ICONS.visibility_off}
+                    d={
+                      showUnmounted() ? ICONS.visibility : ICONS.visibility_off
+                    }
                     fill="currentColor"
                   />
                 </svg>

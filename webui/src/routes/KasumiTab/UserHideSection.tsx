@@ -49,8 +49,7 @@ export default function UserHideSection(props: UserHideSectionProps) {
             onClick={() =>
               props.runAction(
                 () => API.applyUserHideRules(),
-                uiStore.L.kasumi?.hideRulesApplied ??
-                  "User hide rules applied",
+                uiStore.L.kasumi?.hideRulesApplied ?? "User hide rules applied",
                 "full",
               )
             }

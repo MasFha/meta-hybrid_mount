@@ -1,7 +1,6 @@
 import type { SectionShellProps } from "./types";
 
-const EXPAND_MORE_ICON =
-  "M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z";
+const EXPAND_MORE_ICON = "M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z";
 
 export default function SectionShell(props: SectionShellProps) {
   return (
@@ -21,9 +20,7 @@ export default function SectionShell(props: SectionShellProps) {
           </div>
           <div class="kasumi-section-toggle-end">
             {props.badge && (
-              <div
-                class={`state-pill ${props.badgeActive ? "active" : ""}`}
-              >
+              <div class={`state-pill ${props.badgeActive ? "active" : ""}`}>
                 {props.badge}
               </div>
             )}
@@ -35,7 +32,10 @@ export default function SectionShell(props: SectionShellProps) {
           </div>
         </div>
       </button>
-      <div class="kasumi-section-body-wrapper" id={`kasumi-section-${props.id}`}>
+      <div
+        class="kasumi-section-body-wrapper"
+        id={`kasumi-section-${props.id}`}
+      >
         <div class="kasumi-section-body-inner">
           <div class="kasumi-section-body">{props.children}</div>
         </div>

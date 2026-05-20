@@ -2,6 +2,7 @@ import { createSignal, createMemo, createRoot } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { API } from "../api";
 import { normalizeMountMode } from "../api/core/guards";
+import { getErrorMessage } from "../api/core/error";
 import { uiStore } from "./uiStore";
 import type { Module, ModeStats } from "../types";
 
@@ -48,11 +49,12 @@ const createModuleStore = () => {
         setModulesStore(reconcile(data));
         hasLoaded = true;
         return true;
-      } catch (e: any) {
+      } catch (e: unknown) {
         uiStore.showToast(
-          e?.message ||
-            uiStore.L.modules?.scanError ||
-            "Failed to load modules",
+          getErrorMessage(
+            e,
+            uiStore.L.modules?.scanError ?? "Failed to load modules",
+          ),
           "error",
         );
         return false;
@@ -80,11 +82,12 @@ const createModuleStore = () => {
       await API.saveModules(modules);
       uiStore.showToast(uiStore.L.common?.saved || "Saved", "success");
       return true;
-    } catch (e: any) {
+    } catch (e: unknown) {
       uiStore.showToast(
-        e?.message ||
-          uiStore.L.modules?.saveFailed ||
-          "Failed to save module modes",
+        getErrorMessage(
+          e,
+          uiStore.L.modules?.saveFailed ?? "Failed to save module modes",
+        ),
         "error",
       );
       return false;

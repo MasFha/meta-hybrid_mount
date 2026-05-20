@@ -7,6 +7,7 @@ import { ICONS } from "../lib/constants";
 import { ENABLE_KASUMI } from "../lib/constants_gen";
 import { features } from "../lib/features";
 import { getCookie, setCookie } from "../lib/cookies";
+import { getErrorMessage } from "../lib/api/core/error";
 import "./ConfigTab.css";
 import "@material/web/textfield/outlined-text-field.js";
 import "@material/web/icon/icon.js";
@@ -136,9 +137,9 @@ export default function ConfigTab() {
         uiStore.L.config?.kasumiConfigSaved || "Kasumi config saved.",
         "success",
       );
-    } catch (e: any) {
+    } catch (e: unknown) {
       uiStore.showToast(
-        e?.message || uiStore.L.config?.saveFailed || "Failed to save",
+        getErrorMessage(e, uiStore.L.config?.saveFailed ?? "Failed to save"),
         "error",
       );
     } finally {

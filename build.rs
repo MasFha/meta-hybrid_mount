@@ -101,7 +101,8 @@ fn gen_module_prop(data: &build_meta_shared::CargoConfig) -> Result<()> {
     });
 
     let out_dir = PathBuf::from(
-        env::var_os("OUT_DIR").ok_or_else(|| anyhow::anyhow!("OUT_DIR is not set for build script"))?,
+        env::var_os("OUT_DIR")
+            .ok_or_else(|| anyhow::anyhow!("OUT_DIR is not set for build script"))?,
     );
     fs::write(out_dir.join("module.prop"), content.as_bytes())?;
     Ok(())

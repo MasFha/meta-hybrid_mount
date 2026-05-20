@@ -4,6 +4,7 @@ import { API } from "../api";
 import type { InitPayload } from "../api/contracts";
 import { normalizeConfig } from "../api/codec/configCodec";
 import { DEFAULT_CONFIG } from "../constants";
+import { getErrorMessage } from "../api/core/error";
 import { uiStore } from "./uiStore";
 import type { AppConfig } from "../types";
 
@@ -30,9 +31,12 @@ const createConfigStore = () => {
         setConfigStore(reconcile(normalizeConfig(data)));
         hasLoaded = true;
         return true;
-      } catch (e: any) {
+      } catch (e: unknown) {
         uiStore.showToast(
-          e?.message || uiStore.L.config?.loadError || "Failed to load config",
+          getErrorMessage(
+            e,
+            uiStore.L.config?.loadError ?? "Failed to load config",
+          ),
           "error",
         );
         return false;
@@ -78,10 +82,13 @@ const createConfigStore = () => {
         uiStore.showToast(uiStore.L.common?.saved || "Saved", "success");
       }
       return true;
-    } catch (e: any) {
+    } catch (e: unknown) {
       if (showError) {
         uiStore.showToast(
-          e?.message || uiStore.L.config?.saveFailed || "Failed to save config",
+          getErrorMessage(
+            e,
+            uiStore.L.config?.saveFailed ?? "Failed to save config",
+          ),
           "error",
         );
       }
@@ -105,9 +112,12 @@ const createConfigStore = () => {
         "success",
       );
       return true;
-    } catch (e: any) {
+    } catch (e: unknown) {
       uiStore.showToast(
-        e?.message || uiStore.L.config?.saveFailed || "Failed to reset config",
+        getErrorMessage(
+          e,
+          uiStore.L.config?.saveFailed ?? "Failed to reset config",
+        ),
         "error",
       );
       return false;

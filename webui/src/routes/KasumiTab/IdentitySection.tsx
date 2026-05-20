@@ -90,13 +90,12 @@ export default function IdentitySection(props: IdentitySectionProps) {
               disabled={props.pending}
               onClick={() => void props.fillOriginalKernelUname()}
             >
-              {uiStore.L.kasumi?.fillOriginalKernel ?? "Use current kernel info"}
+              {uiStore.L.kasumi?.fillOriginalKernel ??
+                "Use current kernel info"}
             </md-outlined-button>
             <md-filled-button
               disabled={
-                props.pending ||
-                !props.release.trim() ||
-                !props.version.trim()
+                props.pending || !props.release.trim() || !props.version.trim()
               }
               onClick={() =>
                 props.runAction(

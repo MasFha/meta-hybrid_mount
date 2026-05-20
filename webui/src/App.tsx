@@ -15,6 +15,7 @@ import { sysStore } from "./lib/stores/sysStore";
 import { features } from "./lib/features";
 import { ENABLE_KASUMI } from "./lib/constants_gen";
 import { API } from "./lib/api";
+import { getErrorMessage } from "./lib/api/core/error";
 import { onSseStateUpdate, stopSse } from "./lib/api/core/bridge";
 import TopBar from "./components/TopBar";
 import NavBar from "./components/NavBar";
@@ -221,16 +222,22 @@ export default function App() {
           });
         }
       }
-      void sysStore.ensureStatusLoaded();
-      void configStore.loadConfig();
-      void sysStore.ensureVersionLoaded();
+      void sysStore
+        .ensureStatusLoaded()
+        .catch((e: unknown) => console.debug("ensureStatusLoaded failed", e));
+      void configStore
+        .loadConfig()
+        .catch((e: unknown) => console.debug("loadConfig failed", e));
+      void sysStore
+        .ensureVersionLoaded()
+        .catch((e: unknown) => console.debug("ensureVersionLoaded failed", e));
       window.setTimeout(() => {
         void loadInitPayload();
       }, 0);
-    } catch (e) {
+    } catch (e: unknown) {
       console.error("App initialization failed", e);
       uiStore.showToast(
-        e instanceof Error ? e.message : "App initialization failed",
+        getErrorMessage(e, "App initialization failed"),
         "error",
       );
       setInitialDataReady(true);
@@ -255,11 +262,11 @@ export default function App() {
         }
       }
       configStore.loadFromInit(payload);
-    } catch (e) {
+    } catch (e: unknown) {
       if (disposed) return;
       console.error("Background app initialization failed", e);
       uiStore.showToast(
-        e instanceof Error ? e.message : "App initialization failed",
+        getErrorMessage(e, "App initialization failed"),
         "error",
       );
     }

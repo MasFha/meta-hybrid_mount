@@ -5,6 +5,7 @@ import { ICONS } from "../../lib/constants";
 import { uiStore } from "../../lib/stores/uiStore";
 import { kasumiStore } from "../../lib/stores/kasumiStore";
 import type { KasumiStatus } from "../../lib/types";
+import { getErrorMessage } from "../../lib/api/core/error";
 import BottomActions from "../../components/BottomActions";
 import HeroCard from "./HeroCard";
 import LkmSection from "./LkmSection";
@@ -138,9 +139,12 @@ export default function KasumiTab() {
       } else {
         await refreshStatusOnly(true);
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       uiStore.showToast(
-        e?.message || uiStore.L.kasumi?.loadError || "Failed to load Kasumi",
+        getErrorMessage(
+          e,
+          uiStore.L.kasumi?.loadError ?? "Failed to load Kasumi",
+        ),
         "error",
       );
     } finally {
@@ -152,9 +156,12 @@ export default function KasumiTab() {
     setLoading(true);
     try {
       await refreshStatusOnly(false);
-    } catch (e: any) {
+    } catch (e: unknown) {
       uiStore.showToast(
-        e?.message || uiStore.L.kasumi?.loadError || "Failed to load Kasumi",
+        getErrorMessage(
+          e,
+          uiStore.L.kasumi?.loadError ?? "Failed to load Kasumi",
+        ),
         "error",
       );
     } finally {
@@ -172,8 +179,8 @@ export default function KasumiTab() {
       await action();
       await load(refreshMode);
       uiStore.showToast(success, "success");
-    } catch (e: any) {
-      uiStore.showToast(e?.message || "Action failed", "error");
+    } catch (e: unknown) {
+      uiStore.showToast(getErrorMessage(e, "Action failed"), "error");
     } finally {
       setPending(false);
     }
@@ -190,11 +197,13 @@ export default function KasumiTab() {
           "Loaded original kernel values",
         "success",
       );
-    } catch (e: any) {
+    } catch (e: unknown) {
       uiStore.showToast(
-        e?.message ||
-          uiStore.L.kasumi?.originalKernelLoadFailed ||
-          "Failed to read original kernel values",
+        getErrorMessage(
+          e,
+          uiStore.L.kasumi?.originalKernelLoadFailed ??
+            "Failed to read original kernel values",
+        ),
         "error",
       );
     } finally {
@@ -285,9 +294,12 @@ export default function KasumiTab() {
 
     try {
       await loadUserHideRules();
-    } catch (e: any) {
+    } catch (e: unknown) {
       uiStore.showToast(
-        e?.message || uiStore.L.kasumi?.loadError || "Failed to load Kasumi",
+        getErrorMessage(
+          e,
+          uiStore.L.kasumi?.loadError ?? "Failed to load Kasumi",
+        ),
         "error",
       );
     }

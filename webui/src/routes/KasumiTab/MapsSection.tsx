@@ -27,7 +27,9 @@ export default function MapsSection(props: MapsSectionProps) {
             label={uiStore.L.kasumi?.mapsTargetIno ?? "Target Inode"}
             value={props.mapsTargetIno}
             onInput={(e: Event) =>
-              props.setMapsTargetIno((e.currentTarget as HTMLInputElement).value)
+              props.setMapsTargetIno(
+                (e.currentTarget as HTMLInputElement).value,
+              )
             }
             disabled={props.pending}
           />
@@ -36,7 +38,9 @@ export default function MapsSection(props: MapsSectionProps) {
             label={uiStore.L.kasumi?.mapsTargetDev ?? "Target Device"}
             value={props.mapsTargetDev}
             onInput={(e: Event) =>
-              props.setMapsTargetDev((e.currentTarget as HTMLInputElement).value)
+              props.setMapsTargetDev(
+                (e.currentTarget as HTMLInputElement).value,
+              )
             }
             disabled={props.pending}
           />
@@ -146,8 +150,7 @@ export default function MapsSection(props: MapsSectionProps) {
           </For>
           <Show when={(props.config?.maps_rules?.length || 0) === 0}>
             <div class="empty-inline-note">
-              {uiStore.L.kasumi?.mapsEmpty ??
-                "No maps spoof rules configured."}
+              {uiStore.L.kasumi?.mapsEmpty ?? "No maps spoof rules configured."}
             </div>
           </Show>
         </div>
