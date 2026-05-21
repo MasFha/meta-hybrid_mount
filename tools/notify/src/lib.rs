@@ -151,13 +151,14 @@ impl NotificationContext<'_> {
             file_names,
         );
 
-        let caption = build_primary_caption(
+        let raw_caption = build_primary_caption(
             self.request,
             self.branch_name,
             self.artifact_count,
             self.safe_commit_msg,
             self.commit_link,
         );
+        let caption = truncate_caption(&raw_caption, self.commit_link);
         let media = MediaGroup::new(self.build_media_group_items(artifacts, &caption).await?)?;
         let mut action = SendMediaGroup::new(self.chat_id.to_owned(), media);
         if let Some(topic_id) = self.request.topic_id {
@@ -203,12 +204,10 @@ impl NotificationContext<'_> {
             build_extra_caption(self.request, index + 1, self.artifact_count, artifact)
         };
 
-        if caption.len() < 1024 {
-            caption
-        } else if index == 0 {
-            self.commit_link.to_string()
+        if index == 0 {
+            truncate_caption(&caption, self.commit_link)
         } else {
-            escape_html(&artifact.file_name)
+            truncate_caption_extra(&caption, &artifact.file_name)
         }
     }
 }
@@ -295,6 +294,22 @@ fn build_extra_caption(
         escape_html(&artifact.file_name),
         bytes_to_mib(artifact.size_bytes)
     )
+}
+
+fn truncate_caption(caption: &str, fallback_link: &str) -> String {
+    if caption.chars().count() < 1024 {
+        caption.to_string()
+    } else {
+        fallback_link.to_string()
+    }
+}
+
+fn truncate_caption_extra(caption: &str, file_name: &str) -> String {
+    if caption.chars().count() < 1024 {
+        caption.to_string()
+    } else {
+        escape_html(file_name)
+    }
 }
 
 fn bytes_to_mib(bytes: u64) -> f64 {
