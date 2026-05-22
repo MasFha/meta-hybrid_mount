@@ -123,11 +123,7 @@ where
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::mount::umount_mgr::send_umountable;
 use crate::{
-    core::{
-        inventory::Module,
-        recovery::ModuleStageFailure,
-        runtime_state::MountStatistics,
-    },
+    core::{inventory::Module, recovery::ModuleStageFailure, runtime_state::MountStatistics},
     mount::{
         magic_mount::utils::{clone_symlink, collect_module_files, mount_mirror},
         node::{Node, NodeFileType},

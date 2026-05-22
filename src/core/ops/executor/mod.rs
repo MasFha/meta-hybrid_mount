@@ -190,8 +190,7 @@ impl Executor {
                 kasumi_available,
             )
             .map_err(|err| {
-                let failed_module_ids =
-                    resolve_magic_failure_modules(&err, &magic_need_list);
+                let failed_module_ids = resolve_magic_failure_modules(&err, &magic_need_list);
                 ModuleStageFailure::new(
                     FailureStage::Execute,
                     failed_module_ids.clone(),
